@@ -1,0 +1,4 @@
+Character art in this folder (Char_Player.png, Char_Chaser.png, Char_Shooter.png,
+Char_Tank.png, Char_Boss.png, Char_Shadow.png) is composited from Kenney's
+"Shape Characters" asset pack (https://kenney.nl/assets/shape-characters),
+licensed CC0 (public domain) — no attribution required, but credited here anyway.
