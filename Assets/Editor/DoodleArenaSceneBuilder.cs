@@ -19,9 +19,9 @@ namespace DoodleArena.Editor
         private const string PrefabFolder = "Assets/Prefabs";
         private const string SpriteFolder = "Assets/GeneratedSprites";
         private const string InputActionsPath = "Assets/InputSystem_Actions.inputactions";
-        private const float PixelsPerUnit = 100f;
+        private const float PixelsPerUnit = 80f;
 
-        private static readonly Rect Arena = new Rect(-7.3f, -3.5f, 14.6f, 7f);
+        private static readonly Rect Arena = new Rect(-8.5f, -4.5f, 17f, 9f);
 
         [MenuItem("Tools/Doodle Arena/Build Scene")]
         public static void BuildScene()
@@ -33,16 +33,16 @@ namespace DoodleArena.Editor
             Sprite particleSprite = GetCircleSprite(32);
             Material particleMaterial = GetOrCreateParticleMaterial(particleSprite);
 
-            GameObject shotPrefab   = SavePrefab(BuildProjectile("Player", ShotKind.Player, 0.08f, Palette.Gold), "Shot_Player");
-            GameObject enemyShot    = SavePrefab(BuildProjectile("Enemy", ShotKind.Enemy, 0.09f, Palette.Purple), "Shot_Enemy");
-            GameObject bossOrb      = SavePrefab(BuildProjectile("BossOrb", ShotKind.BossOrb, 0.13f, Palette.Red), "Shot_BossOrb");
-            GameObject bottlePrefab = SavePrefab(BuildProjectile("Bottle", ShotKind.Bottle, 0.16f, Palette.Red), "Shot_Bottle");
+            GameObject shotPrefab   = SavePrefab(BuildProjectile("Player", ShotKind.Player, 0.1f, Palette.Gold), "Shot_Player");
+            GameObject enemyShot    = SavePrefab(BuildProjectile("Enemy", ShotKind.Enemy, 0.11f, Palette.Purple), "Shot_Enemy");
+            GameObject bossOrb      = SavePrefab(BuildProjectile("BossOrb", ShotKind.BossOrb, 0.16f, Palette.Red), "Shot_BossOrb");
+            GameObject bottlePrefab = SavePrefab(BuildProjectile("Bottle", ShotKind.Bottle, 0.2f, Palette.Red), "Shot_Bottle");
             GameObject cratePrefab  = SavePrefab(BuildCrate(), "Shot_Crate");
 
             GameObject playerPrefab  = SavePrefab(BuildPlayer(shotPrefab, bottlePrefab, cratePrefab), "Player");
-            GameObject chaserPrefab  = SavePrefab(BuildEnemy("Chaser", "Assets/Art/Char_Chaser.png", 0.24f, null), "Enemy_Chaser");
-            GameObject shooterPrefab = SavePrefab(BuildEnemy("Shooter", "Assets/Art/Char_Shooter.png", 0.32f, enemyShot), "Enemy_Shooter");
-            GameObject tankPrefab    = SavePrefab(BuildEnemy("Tank", "Assets/Art/Char_Tank.png", 0.42f, null), "Enemy_Tank");
+            GameObject chaserPrefab  = SavePrefab(BuildEnemy("Chaser", "Assets/Art/Char_Chaser.png", 0.3f, null), "Enemy_Chaser");
+            GameObject shooterPrefab = SavePrefab(BuildEnemy("Shooter", "Assets/Art/Char_Shooter.png", 0.4f, enemyShot), "Enemy_Shooter");
+            GameObject tankPrefab    = SavePrefab(BuildEnemy("Tank", "Assets/Art/Char_Tank.png", 0.52f, null), "Enemy_Tank");
             GameObject bossPrefab    = SavePrefab(BuildBoss(bossOrb), "Boss_TheOverseer");
 
             BuildSceneObjects(playerPrefab, chaserPrefab, shooterPrefab, tankPrefab, bossPrefab, particleMaterial);
@@ -56,7 +56,7 @@ namespace DoodleArena.Editor
 
         private static GameObject BuildPlayer(GameObject shot, GameObject bottle, GameObject crate)
         {
-            const float radius = 0.28f;
+            const float radius = 0.35f;
             var go = new GameObject("Player");
             go.AddComponent<SpriteRenderer>().sprite = LoadArt("Assets/Art/Char_Player.png");
             var col = go.AddComponent<CircleCollider2D>();
@@ -87,7 +87,7 @@ namespace DoodleArena.Editor
 
         private static GameObject BuildBoss(GameObject orb)
         {
-            const float radius = 0.72f;
+            const float radius = 0.9f;
             var go = new GameObject("Boss_TheOverseer");
             go.AddComponent<SpriteRenderer>().sprite = LoadArt("Assets/Art/Char_Boss.png");
             AddBody(go, radius);
@@ -121,7 +121,7 @@ namespace DoodleArena.Editor
 
         private static GameObject BuildCrate()
         {
-            const float radius = 0.23f;
+            const float radius = 0.29f;
             var go = BuildProjectile("Crate", ShotKind.Crate, radius, Palette.Gold);
             go.GetComponent<SpriteRenderer>().sprite = GetSquareSprite(Mathf.RoundToInt(radius * 2f * PixelsPerUnit));
             return go;
@@ -157,11 +157,11 @@ namespace DoodleArena.Editor
         private static void AddHealthBar(GameObject enemyGO, EnemyController enemy, float radius)
         {
             float width = radius * 2f;
-            float height = Mathf.Max(0.04f, radius * 0.18f);
+            float height = Mathf.Max(0.05f, radius * 0.18f);
 
             var root = new GameObject("HealthBar");
             root.transform.SetParent(enemyGO.transform, false);
-            root.transform.localPosition = new Vector3(0f, radius + 0.2f, -0.02f);
+            root.transform.localPosition = new Vector3(0f, radius + 0.25f, -0.02f);
             root.SetActive(false);
 
             Sprite unit = GetUnitSquareSprite();
@@ -339,13 +339,12 @@ namespace DoodleArena.Editor
                 cam = camGO.AddComponent<Camera>();
             }
             cam.orthographic = true;
-            // GameManager refits this at runtime for the actual window shape; 16:9 here
-            cam.orthographicSize = Mathf.Max(Arena.height * 0.5f, Arena.width * 0.5f * 9f / 16f) + 0.4f;
+            cam.orthographicSize = 5f; // GameManager zooms out at runtime if the window is narrower than 16:9
             cam.transform.position = new Vector3(Arena.center.x, Arena.center.y, -10f);
             var shake = cam.GetComponent<CameraShake>();
             if (shake == null) shake = cam.gameObject.AddComponent<CameraShake>();
 
-            HUDController hud = BuildCanvas();
+            HUDController hud = BuildCanvas(cam);
 
             var gmSO = new SerializedObject(gm);
             gmSO.FindProperty("player").objectReferenceValue = player.GetComponent<PlayerController>();
@@ -373,10 +372,17 @@ namespace DoodleArena.Editor
         private static readonly Vector2 TopRight = new Vector2(1f, 1f);
         private static readonly Vector2 Center = new Vector2(0.5f, 0.5f);
 
-        private static HUDController BuildCanvas()
+        private static HUDController BuildCanvas(Camera cam)
         {
             var canvasGO = new GameObject("Canvas");
-            canvasGO.AddComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+            // Screen Space - Camera instead of Overlay: in the Scene view the canvas then
+            // sits inside the camera's frame at game scale, instead of being drawn
+            // 1 unit per pixel (hundreds of units wide) off to the side.
+            var canvas = canvasGO.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceCamera;
+            canvas.worldCamera = cam;
+            canvas.planeDistance = 5f;   // between the camera (z = -10) and the sprites (z = 0)
+            canvas.sortingOrder = 100;   // draw on top of all sprites
             var scaler = canvasGO.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1600, 900);

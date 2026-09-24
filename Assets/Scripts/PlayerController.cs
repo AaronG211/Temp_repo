@@ -10,45 +10,45 @@ namespace DoodleArena
     public class PlayerController : MonoBehaviour
     {
         [Header("Movement")]
-        [SerializeField] private float moveSpeed = 3.6f;
+        [SerializeField] private float moveSpeed = 4.5f;
         [SerializeField] private float acceleration = 14f;
-        [SerializeField] private float bodyRadius = 0.28f;
+        [SerializeField] private float bodyRadius = 0.35f;
 
         [Header("Punch")]
-        [SerializeField] private float meleeRange = 1.05f;
+        [SerializeField] private float meleeRange = 1.3f;
         [SerializeField] private float meleeDamage = 22f;
         [SerializeField] private float meleeCooldown = 0.3f;
-        [SerializeField] private float meleeKnockback = 0.35f;
+        [SerializeField] private float meleeKnockback = 0.45f;
 
         [Header("Shot")]
         [SerializeField] private ProjectileController rangedShotPrefab;
         [SerializeField] private float rangedCooldown = 0.18f;
-        [SerializeField] private float rangedSpeed = 7.5f;
+        [SerializeField] private float rangedSpeed = 9.5f;
         [SerializeField] private float rangedDamage = 12f;
         [SerializeField] private float rangedLife = 1.5f;
 
         [Header("Dash")]
-        [SerializeField] private float dashDistance = 1.15f;
+        [SerializeField] private float dashDistance = 1.45f;
         [SerializeField] private float dashCooldown = 2.4f;
         [SerializeField] private float dashInvincibility = 0.4f;
-        [SerializeField] private float dashRadius = 1.3f;
+        [SerializeField] private float dashRadius = 1.6f;
         [SerializeField] private float dashDamage = 30f;
-        [SerializeField] private float dashKnockback = 0.75f;
+        [SerializeField] private float dashKnockback = 0.95f;
 
         [Header("Bottle (explodes)")]
         [SerializeField] private ProjectileController bottlePrefab;
-        [SerializeField] private float bottleSpeed = 4.7f;
+        [SerializeField] private float bottleSpeed = 5.9f;
         [SerializeField] private float bottleDamage = 35f;
         [SerializeField] private float bottleLife = 0.7f;
 
         [Header("Crate (pierces)")]
         [SerializeField] private ProjectileController cratePrefab;
-        [SerializeField] private float crateSpeed = 5.8f;
+        [SerializeField] private float crateSpeed = 7.3f;
         [SerializeField] private float crateDamage = 44f;
         [SerializeField] private float crateLife = 1.6f;
         [SerializeField] private int cratePierce = 3;
 
-        [SerializeField] private float muzzleOffset = 0.36f;
+        [SerializeField] private float muzzleOffset = 0.45f;
 
         public Vector2 Aim { get; private set; } = Vector2.right;
         public bool DashReady => dashTimer <= 0f;
@@ -117,8 +117,8 @@ namespace DoodleArena
                 attackTimer = meleeCooldown;
                 Aim = (targetPos - (Vector2)transform.position).normalized;
                 target.TakeDamage(meleeDamage, Aim * meleeKnockback);
-                gm.Burst(targetPos, Palette.Gold, 12, 2.1f);
-                gm.Shake(0.07f);
+                gm.Burst(targetPos, Palette.Gold, 12, 2.6f);
+                gm.Shake(0.09f);
                 gm.HitStop(0.035f);
                 return;
             }
@@ -126,7 +126,7 @@ namespace DoodleArena
             attackTimer = rangedCooldown;
             if (target != null) Aim = (targetPos - (Vector2)transform.position).normalized;
             Fire(rangedShotPrefab, rangedSpeed, rangedDamage, rangedLife, 0);
-            gm.Burst((Vector2)transform.position + Aim * muzzleOffset, Palette.Gold, 3, 0.9f);
+            gm.Burst((Vector2)transform.position + Aim * muzzleOffset, Palette.Gold, 3, 1.1f);
         }
 
         private void Dash(Vector2 input)
@@ -138,8 +138,8 @@ namespace DoodleArena
 
             dashTimer = dashCooldown;
             gm.invincibleTimer = dashInvincibility;
-            gm.Shake(0.09f);
-            gm.Burst(pos, Palette.Red, 20, 2.6f);
+            gm.Shake(0.11f);
+            gm.Burst(pos, Palette.Red, 20, 3.3f);
 
             foreach (var enemy in EnemiesInRange(pos, dashRadius))
                 enemy.TakeDamage(dashDamage, (enemy.Position - pos).normalized * dashKnockback);

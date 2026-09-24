@@ -13,9 +13,9 @@ namespace DoodleArena
         [Header("Stats")]
         [SerializeField] private float baseHp = 420f;
         [SerializeField] private float hpPerRound = 140f;
-        [SerializeField] private float moveSpeed = 0.55f;
-        [SerializeField] private float enragedMoveSpeed = 0.8f;
-        [SerializeField] private float strafeAmount = 0.8f;
+        [SerializeField] private float moveSpeed = 0.7f;
+        [SerializeField] private float enragedMoveSpeed = 1f;
+        [SerializeField] private float strafeAmount = 1f;
 
         [Header("Attacks")]
         [SerializeField] private ProjectileController orbPrefab;
@@ -79,20 +79,20 @@ namespace DoodleArena
 
             if (hpRatio > phaseTwoAt)
             {
-                FireSpread(dir, 5, 13f, 3.2f, 12f);
+                FireSpread(dir, 5, 13f, 4f, 12f);
                 attackTimer = 1.35f;
             }
             else if (hpRatio > phaseThreeAt)
             {
                 float spin = timeAlive * 20f;
-                for (int i = 0; i < 12; i++) FireOrb(Rotate(Vector2.right, i * 30f + spin), 2.45f, 10f);
+                for (int i = 0; i < 12; i++) FireOrb(Rotate(Vector2.right, i * 30f + spin), 3.05f, 10f);
                 attackTimer = 1.05f;
             }
             else
             {
-                FireSpread(dir, 7, 11f, 3.9f, 13f);
+                FireSpread(dir, 7, 11f, 4.9f, 13f);
                 if (gm.ActiveMinionCount() < maxMinions) gm.RequestMinionSpawn();
-                gm.Shake(0.05f);
+                gm.Shake(0.06f);
                 attackTimer = 0.82f;
             }
         }
@@ -125,7 +125,7 @@ namespace DoodleArena
             body.linearVelocity += push;
 
             var gm = GameManager.Instance;
-            if (gm) gm.Burst(Position, Palette.Purple, 5, 1.45f);
+            if (gm) gm.Burst(Position, Palette.Purple, 5, 1.8f);
             if (Hp > 0f) return;
             if (gm) gm.RegisterKill(Kind, Position);
             Destroy(gameObject);

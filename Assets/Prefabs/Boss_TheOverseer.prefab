@@ -26,8 +26,8 @@ Transform:
   m_GameObject: {fileID: 5762212477727986617}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -0.252, z: 0.01}
-  m_LocalScale: {x: 5.1000004, y: 2.8050003, z: 1}
+  m_LocalPosition: {x: 0, y: -0.315, z: 0.01}
+  m_LocalScale: {x: 5.1, y: 2.805, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 3333445489321630836}
@@ -81,12 +81,12 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: -1
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 8330413784501844113, guid: 1108cf59af69d564e93abb7f907c74f4, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 1108cf59af69d564e93abb7f907c74f4, type: 3}
   m_Color: {r: 0, g: 0, b: 0, a: 0.25}
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 0.48, y: 0.2}
+  m_Size: {x: 0.6, y: 0.25}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -182,7 +182,7 @@ SpriteRenderer:
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 1.44, y: 1.44}
+  m_Size: {x: 1.8, y: 1.8}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -250,7 +250,7 @@ CircleCollider2D:
   m_CompositeOperation: 0
   m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
-  m_Radius: 0.72
+  m_Radius: 0.9
 --- !u!114 &6786545399502912880
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -265,9 +265,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DoodleArena.BossController
   baseHp: 420
   hpPerRound: 140
-  moveSpeed: 0.55
-  enragedMoveSpeed: 0.8
-  strafeAmount: 0.8
+  moveSpeed: 0.7
+  enragedMoveSpeed: 1
+  strafeAmount: 1
   orbPrefab: {fileID: 3354962491746946429, guid: 367dc11dcaf0a5f419a0a97e3531f34f, type: 3}
   phaseTwoAt: 0.65
   phaseThreeAt: 0.32

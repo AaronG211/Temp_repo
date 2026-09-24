@@ -7,7 +7,7 @@ namespace DoodleArena
     [RequireComponent(typeof(ParticleSystem))]
     public class BurstEmitter : MonoBehaviour
     {
-        [SerializeField] private Vector2 sizeRange = new Vector2(0.05f, 0.12f);
+        [SerializeField] private Vector2 sizeRange = new Vector2(0.06f, 0.15f);
         [SerializeField] private Vector2 lifetimeRange = new Vector2(0.18f, 0.55f);
 
         private ParticleSystem system;

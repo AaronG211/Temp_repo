@@ -49,6 +49,6 @@ Bindings live in the `Arena` map of `Assets/InputSystem_Actions.inputactions`.
 | `CameraShake`, `BurstEmitter` | Screen shake and hit particles |
 | `Editor/DoodleArenaSceneBuilder` | Generates the prefabs and scene objects |
 
-World units: 1 unit = 100 px of art. The arena is 14.6 x 7 units, centred on the origin.
+World units: 1 unit = 80 px of art. Camera size is 5 (Unity default); the arena is 17 x 9 units, centred on the origin.
 
 Character art is from Kenney's *Shape Characters* pack (CC0), see `Assets/Art/CREDITS.txt`.

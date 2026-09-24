@@ -11,39 +11,39 @@ namespace DoodleArena
     public class EnemyController : MonoBehaviour, IDamageableEnemy
     {
         [SerializeField] private EnemyKind kind;
-        [SerializeField] private float baseRadius = 0.24f;
+        [SerializeField] private float baseRadius = 0.3f;
 
         [Header("Chaser")]
-        [SerializeField] private float chaseSpeed = 1.2f;
-        [SerializeField] private float chaseSpeedPerRound = 0.1f;
+        [SerializeField] private float chaseSpeed = 1.5f;
+        [SerializeField] private float chaseSpeedPerRound = 0.12f;
         [SerializeField] private float contactDamage = 11f;
         [SerializeField] private float contactCooldown = 0.9f;
 
         [Header("Tank")]
-        [SerializeField] private float tankSpeed = 0.65f;
+        [SerializeField] private float tankSpeed = 0.8f;
         [SerializeField] private float tankContactDamage = 18f;
         [SerializeField] private float tankContactCooldown = 1.35f;
 
         [Header("Shooter")]
         [SerializeField] private ProjectileController enemyShotPrefab;
-        [SerializeField] private float shooterMinDistance = 2.6f;
-        [SerializeField] private float shooterMaxDistance = 3.9f;
-        [SerializeField] private float shooterMoveSpeed = 1f;
+        [SerializeField] private float shooterMinDistance = 3.25f;
+        [SerializeField] private float shooterMaxDistance = 4.9f;
+        [SerializeField] private float shooterMoveSpeed = 1.25f;
         [SerializeField] private float shooterFireInterval = 1.25f;
-        [SerializeField] private float shotSpeed = 2.85f;
+        [SerializeField] private float shotSpeed = 3.55f;
         [SerializeField] private float shotDamage = 9f;
 
         [Header("Health Bar")]
         [SerializeField] private GameObject healthBarRoot;
         [SerializeField] private Transform healthBarFill;
-        [SerializeField] private float healthBarWidth = 0.48f;
+        [SerializeField] private float healthBarWidth = 0.6f;
 
         public float Hp { get; private set; }
         public float MaxHp { get; private set; }
         public EnemyKind Kind => kind;
         public Vector2 Position => transform.position;
 
-        private const float ContactReach = 0.32f;
+        private const float ContactReach = 0.4f;
 
         private Rigidbody2D body;
         private CircleCollider2D bodyCollider;
@@ -123,7 +123,7 @@ namespace DoodleArena
                     if (dist < reach && attackTimer <= 0f)
                     {
                         gm.HurtPlayer(tankContactDamage, dir);
-                        gm.Shake(0.1f);
+                        gm.Shake(0.12f);
                         attackTimer = tankContactCooldown;
                     }
                     break;
@@ -131,7 +131,7 @@ namespace DoodleArena
                 case EnemyKind.Shooter:
                     // back off if too close, close in if too far, strafe side to side
                     float approach = dist > shooterMaxDistance ? 1f : dist < shooterMinDistance ? -1f : 0f;
-                    Vector2 strafe = new Vector2(-dir.y, dir.x) * Mathf.Sin(wobble * 2f) * 0.45f;
+                    Vector2 strafe = new Vector2(-dir.y, dir.x) * Mathf.Sin(wobble * 2f) * 0.55f;
                     MoveToward(dir * approach * shooterMoveSpeed + strafe, 3f, dt);
                     if (attackTimer <= 0f)
                     {
@@ -150,9 +150,9 @@ namespace DoodleArena
         private void Fire(Vector2 dir)
         {
             if (!enemyShotPrefab) return;
-            Vector2 spawnPos = Position + dir * (bodyCollider.radius + 0.1f);
+            Vector2 spawnPos = Position + dir * (bodyCollider.radius + 0.12f);
             ProjectileController shot = Instantiate(enemyShotPrefab, spawnPos, Quaternion.identity);
-            shot.Launch(dir * (shotSpeed + round * 0.08f), shotDamage, 4f, 0);
+            shot.Launch(dir * (shotSpeed + round * 0.1f), shotDamage, 4f, 0);
         }
 
         public void TakeDamage(float amount, Vector2 push)
@@ -164,7 +164,7 @@ namespace DoodleArena
             RefreshHealthBar();
 
             var gm = GameManager.Instance;
-            if (gm) gm.Burst(Position, Palette.Purple, 5, 1.45f);
+            if (gm) gm.Burst(Position, Palette.Purple, 5, 1.8f);
             if (Hp > 0f) return;
             if (gm) gm.RegisterKill(kind, Position);
             Destroy(gameObject);

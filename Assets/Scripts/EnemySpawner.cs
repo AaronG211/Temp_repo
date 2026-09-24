@@ -13,8 +13,8 @@ namespace DoodleArena
         [SerializeField] private BossController bossPrefab;
 
         [Header("Spawning")]
-        [SerializeField] private float minDistanceFromPlayer = 3f;
-        [SerializeField] private float edgeInset = 0.3f;
+        [SerializeField] private float minDistanceFromPlayer = 3.75f;
+        [SerializeField] private float edgeInset = 0.4f;
 
         public void ClearAll()
         {

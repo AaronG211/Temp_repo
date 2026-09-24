@@ -12,7 +12,7 @@ namespace DoodleArena
     public class ProjectileController : MonoBehaviour
     {
         [SerializeField] private ShotKind kind;
-        [SerializeField] private float explosionRadius = 1.45f;
+        [SerializeField] private float explosionRadius = 1.8f;
         [SerializeField] private float bottleDrag = 0.9f;
         [SerializeField] private float pierceDamageFalloff = 0.78f;
 
@@ -72,7 +72,7 @@ namespace DoodleArena
                 return;
             }
 
-            float pushStrength = kind == ShotKind.Crate ? 0.48f : 0.16f;
+            float pushStrength = kind == ShotKind.Crate ? 0.6f : 0.2f;
             enemy.TakeDamage(damage, body.linearVelocity.normalized * pushStrength);
 
             if (kind == ShotKind.Crate && pierce-- > 0)
@@ -92,9 +92,9 @@ namespace DoodleArena
             if (gm)
             {
                 Vector2 center = transform.position;
-                gm.Shake(0.14f);
+                gm.Shake(0.18f);
                 gm.HitStop(0.045f);
-                gm.Burst(center, Palette.Red, 35, 3.6f);
+                gm.Burst(center, Palette.Red, 35, 4.5f);
 
                 // iterate backwards: a kill can remove the enemy from the list
                 var enemies = gm.ActiveEnemies;
@@ -102,7 +102,7 @@ namespace DoodleArena
                 {
                     var enemy = enemies[i];
                     if (Vector2.Distance(center, enemy.Position) < explosionRadius)
-                        enemy.TakeDamage(damage, (enemy.Position - center).normalized * 0.8f);
+                        enemy.TakeDamage(damage, (enemy.Position - center).normalized * 1f);
                 }
             }
             Destroy(gameObject);

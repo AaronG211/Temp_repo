@@ -13,7 +13,7 @@ namespace DoodleArena
         public static GameManager Instance { get; private set; }
 
         [Header("Arena")]
-        public Rect arena = new Rect(-7.3f, -3.5f, 14.6f, 7f);
+        public Rect arena = new Rect(-8.5f, -4.5f, 17f, 9f);
 
         [Header("Player")]
         public PlayerController player;
@@ -21,7 +21,7 @@ namespace DoodleArena
         [HideInInspector] public float playerHp;
         public float invincibleTime = 0.65f;
         [HideInInspector] public float invincibleTimer;
-        public float hitKnockback = 1.5f;
+        public float hitKnockback = 1.8f;
 
         [Header("Run")]
         public int totalRounds = 3;
@@ -56,8 +56,9 @@ namespace DoodleArena
             }
         }
 
-        private const float ShakeDecay = 0.18f;
-        private const float CameraMargin = 0.4f;
+        private const float ShakeDecay = 0.22f;
+        private const float CameraSize = 5f;     // Unity's default 2D camera size
+        private const float CameraMargin = 0.2f;
 
         private float waveTimer;
         private bool bossSpawned;
@@ -94,12 +95,12 @@ namespace DoodleArena
             hud?.ShowTitle();
         }
 
-        // Zoom so the whole arena is visible whatever the window's aspect ratio.
+        // Size 5 at 16:9; only zooms out if a narrower window would cut the arena off.
         private void FitCameraToArena()
         {
             if (!cam) return;
-            float halfHeight = Mathf.Max(arena.height * 0.5f, arena.width * 0.5f / cam.aspect);
-            cam.orthographicSize = halfHeight + CameraMargin;
+            float needed = Mathf.Max(arena.height * 0.5f, arena.width * 0.5f / cam.aspect) + CameraMargin;
+            cam.orthographicSize = Mathf.Max(CameraSize, needed);
         }
 
         private void Update()
@@ -257,8 +258,8 @@ namespace DoodleArena
             bool isBoss = kind == EnemyKind.Boss;
             score += isBoss ? 2500 : kind == EnemyKind.Tank ? 250 : 100;
             combo++;
-            Burst(pos, Palette.Purple, isBoss ? 80 : 22, isBoss ? 5.2f : 2.7f);
-            Shake(isBoss ? 0.28f : 0.08f);
+            Burst(pos, Palette.Purple, isBoss ? 80 : 22, isBoss ? 6.5f : 3.4f);
+            Shake(isBoss ? 0.35f : 0.1f);
 
             // small chance for a regular enemy to drop an item
             if (!isBoss && Random.value < 0.18f)
@@ -274,9 +275,9 @@ namespace DoodleArena
             playerHp -= amount;
             invincibleTimer = invincibleTime;
             combo = 0;
-            Shake(0.18f);
+            Shake(0.22f);
             HitStop(0.04f);
-            Burst(player ? (Vector2)player.transform.position : Vector2.zero, Palette.Blood, 20, 3f);
+            Burst(player ? (Vector2)player.transform.position : Vector2.zero, Palette.Blood, 20, 3.8f);
             if (player) player.ApplyKnockback(dir * hitKnockback);
 
             if (playerHp <= 0f)
