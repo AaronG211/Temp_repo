@@ -2,24 +2,27 @@ using UnityEngine;
 
 namespace DoodleArena
 {
-    // Shared between Aaron's and Yipeng's pieces: Shot used to be a plain C#
-    // class appended to a List<Shot> and moved/collided by hand every frame in
-    // DoodleArenaGame.cs. It is now a real prefab with a Rigidbody2D driving
-    // its motion and a trigger Collider2D generating real collision callbacks.
+    // Every bullet and thrown item. Kind decides who it hurts and what happens on hit:
+    //   Player  - single hit
+    //   Crate   - passes through a few enemies, losing damage each time
+    //   Bottle  - slows down, then explodes (on impact or when its time runs out)
+    //   Enemy / BossOrb - only hurt the player
     [RequireComponent(typeof(Rigidbody2D))]
     [RequireComponent(typeof(Collider2D))]
     public class ProjectileController : MonoBehaviour
     {
-        [Tooltip("Set per-prefab: which kind of shot this prefab represents.")]
         [SerializeField] private ShotKind kind;
-        [SerializeField] private float explosionRadius = 145f;
-        [SerializeField] private float bottleDragPerSecond = .9f;
+        [SerializeField] private float explosionRadius = 1.8f;
+        [SerializeField] private float bottleDrag = 0.9f;
+        [SerializeField] private float pierceDamageFalloff = 0.78f;
 
         private Rigidbody2D body;
         private float life;
         private float damage;
         private int pierce;
         private bool dead;
+
+        private bool HurtsPlayer => kind == ShotKind.Enemy || kind == ShotKind.BossOrb;
 
         private void Awake()
         {
@@ -38,72 +41,81 @@ namespace DoodleArena
 
         private void Update()
         {
-            life -= Time.deltaTime;
-            if (kind == ShotKind.Bottle) body.linearVelocity *= 1f - Time.deltaTime * bottleDragPerSecond;
-
-            Rect arena = GameManager.Instance ? GameManager.Instance.arena : new Rect(-100000f, -100000f, 200000f, 200000f);
-            bool outOfBounds = !arena.Contains(transform.position);
-            if (life <= 0f || outOfBounds)
+            var gm = GameManager.Instance;
+            if (gm && (gm.State == GameState.GameOver || gm.State == GameState.Victory))
             {
-                if (kind == ShotKind.Bottle) Explode();
-                else SafeDestroy();
+                // freeze in place on the end screens so nothing keeps scoring or exploding
+                body.linearVelocity = Vector2.zero;
+                return;
             }
+
+            life -= Time.deltaTime;
+            if (kind == ShotKind.Bottle) body.linearVelocity *= 1f - Time.deltaTime * bottleDrag;
+
+            bool outOfBounds = gm && !gm.arena.Contains(transform.position);
+            if (life > 0f && !outOfBounds) return;
+
+            if (kind == ShotKind.Bottle) Explode();
+            else Remove();
         }
 
+        // Enemy shots check for the player here. Player shots are reported from the
+        // enemy's side (EnemyController/BossController call HitEnemy).
         private void OnTriggerEnter2D(Collider2D other)
         {
-            if (dead) return;
-            if (kind == ShotKind.Enemy || kind == ShotKind.BossOrb)
-            {
-                var player = other.GetComponent<PlayerController>();
-                if (player == null) return;
-                if (GameManager.Instance) GameManager.Instance.HurtPlayer(damage, body.linearVelocity.normalized);
-                SafeDestroy();
-            }
-            // Player/Bottle/Crate shots hitting enemies are reported from the
-            // enemy side (EnemyController/BossController.OnTriggerEnter2D calls
-            // HitEnemy below), so there's nothing else to do here.
+            if (dead || !HurtsPlayer) return;
+            if (other.GetComponent<PlayerController>() == null) return;
+            if (GameManager.Instance) GameManager.Instance.HurtPlayer(damage, body.linearVelocity.normalized);
+            Remove();
         }
 
         public void HitEnemy(IDamageableEnemy enemy)
         {
-            if (dead) return;
-            if (kind == ShotKind.Enemy || kind == ShotKind.BossOrb) return; // enemy shots don't hurt enemies
+            if (dead || HurtsPlayer) return;
 
-            if (kind == ShotKind.Bottle) { Explode(); return; }
+            if (kind == ShotKind.Bottle)
+            {
+                Explode();
+                return;
+            }
 
-            Vector2 push = body.linearVelocity.normalized * (kind == ShotKind.Crate ? 48f : 16f);
-            enemy.TakeDamage(damage, push);
+            float pushStrength = kind == ShotKind.Crate ? 0.6f : 0.2f;
+            enemy.TakeDamage(damage, body.linearVelocity.normalized * pushStrength);
 
             if (kind == ShotKind.Crate && pierce-- > 0)
             {
-                damage *= .78f;
-                return; // keep flying, can still hit another enemy
+                damage *= pierceDamageFalloff;
+                return;
             }
-            SafeDestroy();
+            Remove();
         }
 
         private void Explode()
         {
             if (dead) return;
             dead = true;
-            if (GameManager.Instance)
+
+            var gm = GameManager.Instance;
+            if (gm)
             {
-                GameManager.Instance.Shake(14f);
-                GameManager.Instance.HitStop(.045f);
-                GameManager.Instance.Burst(transform.position, new Color(.94f, .36f, .37f), 35, 360f);
-                var enemies = GameManager.Instance.ActiveEnemies;
+                Vector2 center = transform.position;
+                gm.Shake(0.18f);
+                gm.HitStop(0.045f);
+                gm.Burst(center, Palette.Red, 35, 4.5f);
+
+                // iterate backwards: a kill can remove the enemy from the list
+                var enemies = gm.ActiveEnemies;
                 for (int i = enemies.Count - 1; i >= 0; i--)
                 {
                     var enemy = enemies[i];
-                    if (Vector2.Distance(transform.position, enemy.Position) < explosionRadius)
-                        enemy.TakeDamage(damage, (enemy.Position - (Vector2)transform.position).normalized * 80f);
+                    if (Vector2.Distance(center, enemy.Position) < explosionRadius)
+                        enemy.TakeDamage(damage, (enemy.Position - center).normalized * 1f);
                 }
             }
             Destroy(gameObject);
         }
 
-        private void SafeDestroy()
+        private void Remove()
         {
             if (dead) return;
             dead = true;

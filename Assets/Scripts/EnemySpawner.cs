@@ -2,19 +2,19 @@ using UnityEngine;
 
 namespace DoodleArena
 {
-    // Yipeng owns this file: SpawnEnemy used to create a plain Enemy object and
-    // append it to a List<Enemy> with nothing ever placed in the scene.
-    // SpawnEnemy/SpawnWave/SpawnBoss now call Instantiate on real prefabs.
+    // Spawns waves along the arena edges (never right on top of the player)
+    // and the boss in the middle.
     public class EnemySpawner : MonoBehaviour
     {
-        [Header("Enemy Prefabs")]
+        [Header("Prefabs")]
         [SerializeField] private EnemyController chaserPrefab;
         [SerializeField] private EnemyController shooterPrefab;
         [SerializeField] private EnemyController tankPrefab;
         [SerializeField] private BossController bossPrefab;
 
-        [Header("Spawn Rules")]
-        [SerializeField] private float minSpawnDistanceFromPlayer = 300f;
+        [Header("Spawning")]
+        [SerializeField] private float minDistanceFromPlayer = 3.75f;
+        [SerializeField] private float edgeInset = 0.4f;
 
         public void ClearAll()
         {
@@ -23,6 +23,8 @@ namespace DoodleArena
             foreach (var shot in FindObjectsByType<ProjectileController>(FindObjectsSortMode.None)) Destroy(shot.gameObject);
         }
 
+        // Wave 1 is all chasers, wave 2 mixes in shooters, wave 3 adds tanks.
+        // Later rounds just add more bodies.
         public void SpawnWave(int round, int wave)
         {
             int count = 2 + round + wave * 2;
@@ -37,38 +39,50 @@ namespace DoodleArena
 
         public void SpawnEnemy(EnemyKind kind, int round)
         {
-            EnemyController prefab = kind == EnemyKind.Shooter ? shooterPrefab
-                : kind == EnemyKind.Tank ? tankPrefab
-                : chaserPrefab;
+            EnemyController prefab = kind switch
+            {
+                EnemyKind.Shooter => shooterPrefab,
+                EnemyKind.Tank => tankPrefab,
+                _ => chaserPrefab,
+            };
             if (!prefab) return;
-            Vector2 pos = FindSpawnPosition();
-            EnemyController enemy = Instantiate(prefab, pos, Quaternion.identity, transform);
+            EnemyController enemy = Instantiate(prefab, PickSpawnPoint(), Quaternion.identity, transform);
             enemy.Initialize(kind, round);
         }
 
         public void SpawnBoss(int round)
         {
             if (!bossPrefab || !GameManager.Instance) return;
-            Vector2 pos = GameManager.Instance.arena.center;
-            BossController boss = Instantiate(bossPrefab, pos, Quaternion.identity, transform);
+            BossController boss = Instantiate(bossPrefab, GameManager.Instance.arena.center, Quaternion.identity, transform);
             boss.Initialize(round);
         }
 
-        private Vector2 FindSpawnPosition()
+        private Vector2 PickSpawnPoint()
         {
-            Rect arena = GameManager.Instance.arena;
-            Vector2 playerPos = GameManager.Instance.player ? (Vector2)GameManager.Instance.player.transform.position : arena.center;
-            Vector2 pos;
-            int guard = 0;
-            do
+            var gm = GameManager.Instance;
+            Rect area = gm.arena;
+            area.xMin += edgeInset; area.xMax -= edgeInset;
+            area.yMin += edgeInset; area.yMax -= edgeInset;
+            Vector2 playerPos = gm.player ? (Vector2)gm.player.transform.position : area.center;
+
+            Vector2 pos = area.center;
+            for (int attempt = 0; attempt < 20; attempt++)
             {
-                int edge = Random.Range(0, 4);
-                pos = edge < 2
-                    ? new Vector2(edge == 0 ? arena.xMin + 30f : arena.xMax - 30f, Random.Range(arena.yMin + 30f, arena.yMax - 30f))
-                    : new Vector2(Random.Range(arena.xMin + 30f, arena.xMax - 30f), edge == 2 ? arena.yMin + 30f : arena.yMax - 30f);
-                guard++;
-            } while (Vector2.Distance(pos, playerPos) < minSpawnDistanceFromPlayer && guard < 20);
+                pos = RandomPointOnEdge(area);
+                if (Vector2.Distance(pos, playerPos) >= minDistanceFromPlayer) break;
+            }
             return pos;
+        }
+
+        private static Vector2 RandomPointOnEdge(Rect r)
+        {
+            switch (Random.Range(0, 4))
+            {
+                case 0:  return new Vector2(r.xMin, Random.Range(r.yMin, r.yMax));
+                case 1:  return new Vector2(r.xMax, Random.Range(r.yMin, r.yMax));
+                case 2:  return new Vector2(Random.Range(r.xMin, r.xMax), r.yMin);
+                default: return new Vector2(Random.Range(r.xMin, r.xMax), r.yMax);
+            }
         }
     }
 }

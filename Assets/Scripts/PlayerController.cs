@@ -1,179 +1,201 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.InputSystem.Controls;
 
 namespace DoodleArena
 {
-    // Sideesh owns this file: the player is now a real GameObject moved via
-    // transform.position (matching Q1's UFOController) with a Collider2D for
-    // presence, instead of a private Vector2 field redrawn every frame by OnGUI.
-    // Melee/dash range checks use GameManager's live enemy registry (backed by
-    // real Collider2D-bearing enemy objects) instead of NearestEnemy() + a
-    // manual Vector2.Distance loop over a List<Enemy>.
+    // Movement, the auto-targeting primary attack (punch when close, shoot when not),
+    // the dash smash, and throwing bottles/crates.
     [RequireComponent(typeof(Collider2D))]
     public class PlayerController : MonoBehaviour
     {
         [Header("Movement")]
-        [SerializeField] private float moveSpeed = 365f;
-        [SerializeField] private float accelSharpness = 14f;
-        [SerializeField] private float bodyRadius = 28f;
+        [SerializeField] private float moveSpeed = 4.5f;
+        [SerializeField] private float acceleration = 14f;
+        [SerializeField] private float bodyRadius = 0.35f;
 
-        [Header("Primary Attack (melee if in range, otherwise ranged)")]
-        [SerializeField] private float meleeRange = 105f;
+        [Header("Punch")]
+        [SerializeField] private float meleeRange = 1.3f;
         [SerializeField] private float meleeDamage = 22f;
-        [SerializeField] private float meleeCooldown = .32f;
-        [SerializeField] private float meleeKnockback = 36f;
+        [SerializeField] private float meleeCooldown = 0.3f;
+        [SerializeField] private float meleeKnockback = 0.45f;
+
+        [Header("Shot")]
         [SerializeField] private ProjectileController rangedShotPrefab;
-        [SerializeField] private float rangedCooldown = .18f;
-        [SerializeField] private float rangedSpeed = 760f;
+        [SerializeField] private float rangedCooldown = 0.18f;
+        [SerializeField] private float rangedSpeed = 9.5f;
         [SerializeField] private float rangedDamage = 12f;
-        [SerializeField] private float rangedLife = 1.45f;
+        [SerializeField] private float rangedLife = 1.5f;
 
-        [Header("Dash Attack")]
-        [SerializeField] private float dashDistance = 115f;
+        [Header("Dash")]
+        [SerializeField] private float dashDistance = 1.45f;
         [SerializeField] private float dashCooldown = 2.4f;
-        [SerializeField] private float dashInvincibility = .4f;
-        [SerializeField] private float dashRange = 128f;
+        [SerializeField] private float dashInvincibility = 0.4f;
+        [SerializeField] private float dashRadius = 1.6f;
         [SerializeField] private float dashDamage = 30f;
-        [SerializeField] private float dashKnockback = 75f;
+        [SerializeField] private float dashKnockback = 0.95f;
 
-        [Header("Items")]
+        [Header("Bottle (explodes)")]
         [SerializeField] private ProjectileController bottlePrefab;
+        [SerializeField] private float bottleSpeed = 5.9f;
+        [SerializeField] private float bottleDamage = 35f;
+        [SerializeField] private float bottleLife = 0.7f;
+
+        [Header("Crate (pierces)")]
         [SerializeField] private ProjectileController cratePrefab;
+        [SerializeField] private float crateSpeed = 7.3f;
+        [SerializeField] private float crateDamage = 44f;
+        [SerializeField] private float crateLife = 1.6f;
+        [SerializeField] private int cratePierce = 3;
+
+        [SerializeField] private float muzzleOffset = 0.45f;
 
         public Vector2 Aim { get; private set; } = Vector2.right;
-        public bool SecondaryReady => secondaryCooldownTimer <= 0f;
+        public bool DashReady => dashTimer <= 0f;
 
         private Vector2 velocity;
-        private float primaryCooldownTimer, secondaryCooldownTimer;
+        private float attackTimer, dashTimer;
         private Rect arenaBounds;
+        private InputAction moveAction, attackAction, dashAction, bottleAction, crateAction;
+
+        private void Start()
+        {
+            var controls = GameManager.Instance ? GameManager.Instance.Controls : null;
+            if (controls == null) return;
+            moveAction = controls["Move"];
+            attackAction = controls["Attack"];
+            dashAction = controls["Dash"];
+            bottleAction = controls["Bottle"];
+            crateAction = controls["Crate"];
+        }
 
         public void ResetToStart(Rect arena)
         {
             arenaBounds = arena;
             transform.position = arena.center;
             velocity = Vector2.zero;
-            primaryCooldownTimer = secondaryCooldownTimer = 0f;
+            attackTimer = dashTimer = 0f;
             Aim = Vector2.right;
         }
 
         private void Update()
         {
             var gm = GameManager.Instance;
-            if (gm == null || !gm.IsPlaying) return;
+            if (gm == null || moveAction == null) return;
+            // keep control during the short break between waves, not just mid-wave
+            if (!gm.IsPlaying && gm.State != GameState.BetweenWave) return;
 
             float dt = Time.deltaTime;
-            primaryCooldownTimer -= dt;
-            secondaryCooldownTimer -= dt;
+            attackTimer -= dt;
+            dashTimer -= dt;
 
-            var kb = Keyboard.current;
-            if (kb == null) return;
+            Vector2 input = Vector2.ClampMagnitude(moveAction.ReadValue<Vector2>(), 1f);
+            if (input.sqrMagnitude > 0.01f) Aim = input.normalized;
 
-            Vector2 input = Vector2.zero;
-            if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) input.x--;
-            if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) input.x++;
-            if (kb.wKey.isPressed || kb.upArrowKey.isPressed) input.y++;
-            if (kb.sKey.isPressed || kb.downArrowKey.isPressed) input.y--;
-            if (input.sqrMagnitude > 0f) { input.Normalize(); Aim = input; }
+            // ease toward the target velocity instead of snapping
+            velocity = Vector2.Lerp(velocity, input * moveSpeed, 1f - Mathf.Exp(-dt * acceleration));
+            transform.position = ClampToArena((Vector2)transform.position + velocity * dt);
 
-            velocity = Vector2.Lerp(velocity, input * moveSpeed, 1f - Mathf.Exp(-dt * accelSharpness));
-            Vector2 pos = (Vector2)transform.position + velocity * dt;
-            pos.x = Mathf.Clamp(pos.x, arenaBounds.xMin + bodyRadius, arenaBounds.xMax - bodyRadius);
-            pos.y = Mathf.Clamp(pos.y, arenaBounds.yMin + bodyRadius, arenaBounds.yMax - bodyRadius);
-            transform.position = pos;
-
-            if (kb.jKey.isPressed && primaryCooldownTimer <= 0f) PrimaryAttack();
-            if (WasPressed(kb.kKey) && secondaryCooldownTimer <= 0f) DashAttack(input);
-            if (WasPressed(kb.iKey) && gm.bottles > 0) ThrowItem(bottlePrefab, true);
-            if (WasPressed(kb.oKey) && gm.crates > 0) ThrowItem(cratePrefab, false);
+            if (attackAction.IsPressed() && attackTimer <= 0f) PrimaryAttack();
+            if (dashAction.WasPressedThisFrame() && DashReady) Dash(input);
+            if (bottleAction.WasPressedThisFrame() && gm.bottles > 0) ThrowBottle();
+            if (crateAction.WasPressedThisFrame() && gm.crates > 0) ThrowCrate();
         }
 
-        private static bool WasPressed(KeyControl key) => key != null && key.wasPressedThisFrame;
+        private Vector2 ClampToArena(Vector2 pos)
+        {
+            pos.x = Mathf.Clamp(pos.x, arenaBounds.xMin + bodyRadius, arenaBounds.xMax - bodyRadius);
+            pos.y = Mathf.Clamp(pos.y, arenaBounds.yMin + bodyRadius, arenaBounds.yMax - bodyRadius);
+            return pos;
+        }
 
         private void PrimaryAttack()
         {
             var gm = GameManager.Instance;
-            IDamageableEnemy nearest = FindNearestEnemy(out Vector2 nearestPos, out float nearestDist);
-            if (nearest != null && nearestDist < meleeRange)
+            IDamageableEnemy target = FindNearestEnemy(out Vector2 targetPos, out float targetDist);
+
+            if (target != null && targetDist < meleeRange)
             {
-                primaryCooldownTimer = meleeCooldown;
-                Aim = (nearestPos - (Vector2)transform.position).normalized;
-                nearest.TakeDamage(meleeDamage, Aim * meleeKnockback);
-                gm.Burst(nearestPos, new Color(.96f, .78f, .37f), 12, 210f);
-                gm.Shake(7f); gm.HitStop(.035f);
+                attackTimer = meleeCooldown;
+                Aim = (targetPos - (Vector2)transform.position).normalized;
+                target.TakeDamage(meleeDamage, Aim * meleeKnockback);
+                gm.Burst(targetPos, Palette.Gold, 12, 2.6f);
+                gm.Shake(0.09f);
+                gm.HitStop(0.035f);
+                return;
             }
-            else
-            {
-                primaryCooldownTimer = rangedCooldown;
-                Vector2 dir = nearest != null ? (nearestPos - (Vector2)transform.position).normalized : Aim;
-                Aim = dir;
-                FireProjectile(rangedShotPrefab, dir, rangedSpeed, rangedDamage, rangedLife, 0);
-                gm.Burst((Vector2)transform.position + dir * 36f, new Color(.96f, .78f, .37f), 3, 90f);
-            }
+
+            attackTimer = rangedCooldown;
+            if (target != null) Aim = (targetPos - (Vector2)transform.position).normalized;
+            Fire(rangedShotPrefab, rangedSpeed, rangedDamage, rangedLife, 0);
+            gm.Burst((Vector2)transform.position + Aim * muzzleOffset, Palette.Gold, 3, 1.1f);
         }
 
-        private void DashAttack(Vector2 input)
+        private void Dash(Vector2 input)
         {
             var gm = GameManager.Instance;
-            Vector2 dir = input.sqrMagnitude > 0f ? input.normalized : Aim;
-            Vector2 pos = (Vector2)transform.position + dir * dashDistance;
-            pos.x = Mathf.Clamp(pos.x, arenaBounds.xMin + bodyRadius, arenaBounds.xMax - bodyRadius);
-            pos.y = Mathf.Clamp(pos.y, arenaBounds.yMin + bodyRadius, arenaBounds.yMax - bodyRadius);
+            Vector2 dir = input.sqrMagnitude > 0.01f ? input.normalized : Aim;
+            Vector2 pos = ClampToArena((Vector2)transform.position + dir * dashDistance);
             transform.position = pos;
 
-            secondaryCooldownTimer = dashCooldown;
+            dashTimer = dashCooldown;
             gm.invincibleTimer = dashInvincibility;
-            gm.Shake(9f);
-            gm.Burst(pos, new Color(.94f, .36f, .37f), 20, 260f);
+            gm.Shake(0.11f);
+            gm.Burst(pos, Palette.Red, 20, 3.3f);
 
-            foreach (var enemy in FindAllEnemiesInRange(pos, dashRange))
+            foreach (var enemy in EnemiesInRange(pos, dashRadius))
                 enemy.TakeDamage(dashDamage, (enemy.Position - pos).normalized * dashKnockback);
         }
 
-        private void ThrowItem(ProjectileController prefab, bool isBottle)
+        private void ThrowBottle()
         {
-            var gm = GameManager.Instance;
-            IDamageableEnemy nearest = FindNearestEnemy(out Vector2 nearestPos, out _);
-            Vector2 dir = nearest != null ? (nearestPos - (Vector2)transform.position).normalized : Aim;
-            if (isBottle) gm.ConsumeBottle(); else gm.ConsumeCrate();
-            FireProjectile(prefab, dir,
-                isBottle ? 470f : 580f,
-                isBottle ? 35f : 44f,
-                isBottle ? .72f : 1.65f,
-                isBottle ? 0 : 3);
+            GameManager.Instance.ConsumeBottle();
+            AimAtNearest();
+            Fire(bottlePrefab, bottleSpeed, bottleDamage, bottleLife, 0);
         }
 
-        private void FireProjectile(ProjectileController prefab, Vector2 dir, float speed, float damage, float life, int pierce)
+        private void ThrowCrate()
+        {
+            GameManager.Instance.ConsumeCrate();
+            AimAtNearest();
+            Fire(cratePrefab, crateSpeed, crateDamage, crateLife, cratePierce);
+        }
+
+        private void AimAtNearest()
+        {
+            if (FindNearestEnemy(out Vector2 pos, out _) != null)
+                Aim = (pos - (Vector2)transform.position).normalized;
+        }
+
+        private void Fire(ProjectileController prefab, float speed, float damage, float life, int pierce)
         {
             if (!prefab) return;
-            Vector2 spawnPos = (Vector2)transform.position + dir * 36f;
+            Vector2 spawnPos = (Vector2)transform.position + Aim * muzzleOffset;
             ProjectileController shot = Instantiate(prefab, spawnPos, Quaternion.identity);
-            shot.Launch(dir * speed, damage, life, pierce);
+            shot.Launch(Aim * speed, damage, life, pierce);
         }
 
         private IDamageableEnemy FindNearestEnemy(out Vector2 pos, out float dist)
         {
             IDamageableEnemy best = null;
             float bestSq = float.MaxValue;
-            pos = default; dist = float.MaxValue;
-            var enemies = GameManager.Instance.ActiveEnemies;
-            for (int i = 0; i < enemies.Count; i++)
+            Vector2 me = transform.position;
+            foreach (var enemy in GameManager.Instance.ActiveEnemies)
             {
-                var candidate = enemies[i];
-                float sq = ((Vector2)candidate.Position - (Vector2)transform.position).sqrMagnitude;
-                if (sq < bestSq) { bestSq = sq; best = candidate; }
+                float sq = (enemy.Position - me).sqrMagnitude;
+                if (sq < bestSq) { bestSq = sq; best = enemy; }
             }
-            if (best != null) { pos = best.Position; dist = Mathf.Sqrt(bestSq); }
+            pos = best != null ? best.Position : default;
+            dist = best != null ? Mathf.Sqrt(bestSq) : float.MaxValue;
             return best;
         }
 
-        private List<IDamageableEnemy> FindAllEnemiesInRange(Vector2 center, float range)
+        private List<IDamageableEnemy> EnemiesInRange(Vector2 center, float range)
         {
+            // copy first: TakeDamage can kill an enemy and remove it from the live list
             var result = new List<IDamageableEnemy>();
-            var enemies = GameManager.Instance.ActiveEnemies;
-            for (int i = 0; i < enemies.Count; i++)
-                if (Vector2.Distance(center, enemies[i].Position) < range) result.Add(enemies[i]);
+            foreach (var enemy in GameManager.Instance.ActiveEnemies)
+                if (Vector2.Distance(center, enemy.Position) < range) result.Add(enemy);
             return result;
         }
 

@@ -89,7 +89,7 @@ SpriteRenderer:
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 18, y: 18}
+  m_Size: {x: 0.225, y: 0.225}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -157,7 +157,7 @@ CircleCollider2D:
   m_CompositeOperation: 0
   m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
-  m_Radius: 9
+  m_Radius: 0.11
 --- !u!114 &6659946730553173114
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -171,5 +171,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DoodleArena.ProjectileController
   kind: 1
-  explosionRadius: 145
-  bottleDragPerSecond: 0.9
+  explosionRadius: 1.8
+  bottleDrag: 0.9
+  pierceDamageFalloff: 0.78

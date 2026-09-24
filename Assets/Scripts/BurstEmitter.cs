@@ -2,13 +2,14 @@ using UnityEngine;
 
 namespace DoodleArena
 {
-    // Aijia owns this file: the hand-rolled List<Spark> that DrawSpark rotated
-    // and drew as little rectangles every frame is now a real ParticleSystem;
-    // this just wraps it so GameManager.Burst(...) can still ask for a
-    // variable-count, variable-color, variable-speed puff the same way it used to.
+    // Wraps one ParticleSystem so gameplay code can ask for a quick puff of
+    // particles with a given color, count and speed.
     [RequireComponent(typeof(ParticleSystem))]
     public class BurstEmitter : MonoBehaviour
     {
+        [SerializeField] private Vector2 sizeRange = new Vector2(0.06f, 0.15f);
+        [SerializeField] private Vector2 lifetimeRange = new Vector2(0.18f, 0.55f);
+
         private ParticleSystem system;
         private ParticleSystem.EmitParams emitParams;
 
@@ -16,14 +17,11 @@ namespace DoodleArena
         {
             system = GetComponent<ParticleSystem>();
 
-            // Configuring these modules is only safe once the ParticleSystem is a live
-            // component in a running scene (Play mode), not from an editor script right
-            // after AddComponent, so it happens here instead of in the scene builder.
+            // Module settings are applied here rather than in the editor builder:
+            // touching ps.main right after AddComponent in edit mode throws in this Unity version.
             var main = system.main;
             main.simulationSpace = ParticleSystemSimulationSpace.World;
-            main.startLifetime = .4f;
-            main.startSize = .2f;
-            main.startSpeed = 0f; // velocity is supplied per-particle via EmitParams
+            main.startSpeed = 0f; // each particle gets its own velocity in Emit()
             main.maxParticles = 500;
             main.playOnAwake = false;
 
@@ -31,17 +29,15 @@ namespace DoodleArena
             emission.rateOverTime = 0f;
         }
 
-        public void Emit(Vector2 position, Color color, int count, float speedRange)
+        public void Emit(Vector2 position, Color color, int count, float maxSpeed)
         {
+            emitParams.position = position;
+            emitParams.startColor = color;
             for (int i = 0; i < count; i++)
             {
-                Vector2 dir = Random.insideUnitCircle.normalized;
-                float speed = Random.Range(speedRange * .25f, speedRange);
-                emitParams.position = position;
-                emitParams.velocity = dir * speed;
-                emitParams.startColor = color;
-                emitParams.startLifetime = Random.Range(.18f, .55f);
-                emitParams.startSize = Random.Range(.1f, .3f);
+                emitParams.velocity = Random.insideUnitCircle.normalized * Random.Range(maxSpeed * 0.25f, maxSpeed);
+                emitParams.startLifetime = Random.Range(lifetimeRange.x, lifetimeRange.y);
+                emitParams.startSize = Random.Range(sizeRange.x, sizeRange.y);
                 system.Emit(emitParams, 1);
             }
         }

@@ -2,24 +2,23 @@ using UnityEngine;
 
 namespace DoodleArena
 {
-    // Aijia owns this file: screen shake used to be faked by nudging GUI.matrix
-    // every frame in OnGUI. It now actually moves the camera's own transform.
+    // Jitters the camera around its resting position. GameManager feeds in the
+    // current shake amount (world units) every frame.
     public class CameraShake : MonoBehaviour
     {
-        [SerializeField] private float intensityScale = .3f;
+        [SerializeField] private float strength = 0.3f;
 
-        private Vector3 basePosition;
-        private float currentShake;
+        private Vector3 restPosition;
+        private float amount;
 
-        private void Awake() => basePosition = transform.localPosition;
+        private void Awake() => restPosition = transform.localPosition;
 
-        public void SetShake(float amount) => currentShake = amount;
+        public void SetShake(float value) => amount = value;
 
         private void LateUpdate()
         {
-            transform.localPosition = currentShake > 0f
-                ? basePosition + (Vector3)(Random.insideUnitCircle * currentShake * intensityScale)
-                : basePosition;
+            Vector3 offset = amount > 0f ? (Vector3)(Random.insideUnitCircle * amount * strength) : Vector3.zero;
+            transform.localPosition = restPosition + offset;
         }
     }
 }
