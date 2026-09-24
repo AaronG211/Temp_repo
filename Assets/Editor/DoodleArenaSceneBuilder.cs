@@ -1,203 +1,117 @@
-using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace DoodleArena.Editor
 {
-    // Run this once (Tools > Doodle Arena > Build Scene) after opening
-    // SampleScene.unity. It generates placeholder sprites, saves prefabs for
-    // the player/enemies/boss/projectiles, and builds the scene hierarchy
-    // (GameManager, spawner, camera rig, Canvas HUD) that the runtime scripts
-    // expect, wiring every serialized reference the way a person would
-    // normally do by hand in the Inspector. This is a first pass automation:
-    // it has not been run inside the Unity Editor by the person who wrote it,
-    // so re-run it and report any console errors so they can get fixed fast.
+    // Tools > Doodle Arena > Build Scene
+    // Regenerates the prefabs (player, enemies, boss, projectiles) and rebuilds the
+    // scene objects (GameManager, spawner, camera, HUD canvas) with all references
+    // wired up. Safe to re-run; it replaces whatever it built last time.
     public static class DoodleArenaSceneBuilder
     {
         private const string PrefabFolder = "Assets/Prefabs";
         private const string SpriteFolder = "Assets/GeneratedSprites";
+        private const string InputActionsPath = "Assets/InputSystem_Actions.inputactions";
+        private const float PixelsPerUnit = 100f;
 
-        [MenuItem("Tools/Doodle Arena/Build Scene (Convert To Real Objects)")]
+        private static readonly Rect Arena = new Rect(-7.3f, -3.5f, 14.6f, 7f);
+
+        [MenuItem("Tools/Doodle Arena/Build Scene")]
         public static void BuildScene()
         {
-            // Picks up any art files dropped into the project from outside the Editor
-            // (e.g. copied in by hand or by a tool) before this script tries to load them.
             AssetDatabase.Refresh();
-
             EnsureFolder(PrefabFolder);
             EnsureFolder(SpriteFolder);
 
             Sprite particleSprite = GetCircleSprite(32);
             Material particleMaterial = GetOrCreateParticleMaterial(particleSprite);
 
-            GameObject playerPrefab = SaveAndDestroy(BuildPlayerPrefab(), "Player");
-            GameObject chaserPrefab = SaveAndDestroy(BuildEnemyPrefab("Chaser", "Assets/Art/Char_Chaser.png", 24f), "Enemy_Chaser");
-            GameObject shooterPrefab = SaveAndDestroy(BuildEnemyPrefab("Shooter", "Assets/Art/Char_Shooter.png", 32f), "Enemy_Shooter");
-            GameObject tankPrefab = SaveAndDestroy(BuildEnemyPrefab("Tank", "Assets/Art/Char_Tank.png", 42f), "Enemy_Tank");
-            GameObject bossPrefab = SaveAndDestroy(BuildBossPrefab(), "Boss_TheOverseer");
-            GameObject playerShotPrefab = SaveAndDestroy(BuildProjectilePrefab("PlayerShot", ShotKind.Player, 8, new Color(.96f, .78f, .37f)), "Shot_Player");
-            GameObject enemyShotPrefab = SaveAndDestroy(BuildProjectilePrefab("EnemyShot", ShotKind.Enemy, 9, new Color(.42f, .29f, .71f)), "Shot_Enemy");
-            GameObject bossOrbPrefab = SaveAndDestroy(BuildProjectilePrefab("BossOrb", ShotKind.BossOrb, 13, new Color(.94f, .36f, .37f)), "Shot_BossOrb");
-            GameObject bottlePrefab = SaveAndDestroy(BuildProjectilePrefab("Bottle", ShotKind.Bottle, 16, new Color(.94f, .36f, .37f)), "Shot_Bottle");
-            GameObject cratePrefab = SaveAndDestroy(BuildCratePrefab(), "Shot_Crate");
+            GameObject shotPrefab   = SavePrefab(BuildProjectile("Player", ShotKind.Player, 0.08f, Palette.Gold), "Shot_Player");
+            GameObject enemyShot    = SavePrefab(BuildProjectile("Enemy", ShotKind.Enemy, 0.09f, Palette.Purple), "Shot_Enemy");
+            GameObject bossOrb      = SavePrefab(BuildProjectile("BossOrb", ShotKind.BossOrb, 0.13f, Palette.Red), "Shot_BossOrb");
+            GameObject bottlePrefab = SavePrefab(BuildProjectile("Bottle", ShotKind.Bottle, 0.16f, Palette.Red), "Shot_Bottle");
+            GameObject cratePrefab  = SavePrefab(BuildCrate(), "Shot_Crate");
 
-            // Wire the enemy/boss prefab assets to fire the projectile prefab assets.
-            WireEnemyShot(chaserPrefab, null);
-            WireEnemyShot(shooterPrefab, enemyShotPrefab);
-            WireEnemyShot(tankPrefab, null);
-            WireBossOrb(bossPrefab, bossOrbPrefab);
-            WirePlayerShots(playerPrefab, playerShotPrefab, bottlePrefab, cratePrefab);
+            GameObject playerPrefab  = SavePrefab(BuildPlayer(shotPrefab, bottlePrefab, cratePrefab), "Player");
+            GameObject chaserPrefab  = SavePrefab(BuildEnemy("Chaser", "Assets/Art/Char_Chaser.png", 0.24f, null), "Enemy_Chaser");
+            GameObject shooterPrefab = SavePrefab(BuildEnemy("Shooter", "Assets/Art/Char_Shooter.png", 0.32f, enemyShot), "Enemy_Shooter");
+            GameObject tankPrefab    = SavePrefab(BuildEnemy("Tank", "Assets/Art/Char_Tank.png", 0.42f, null), "Enemy_Tank");
+            GameObject bossPrefab    = SavePrefab(BuildBoss(bossOrb), "Boss_TheOverseer");
 
-            BuildRuntimeScene(playerPrefab, chaserPrefab, shooterPrefab, tankPrefab, bossPrefab, particleMaterial);
+            BuildSceneObjects(playerPrefab, chaserPrefab, shooterPrefab, tankPrefab, bossPrefab, particleMaterial);
 
             AssetDatabase.SaveAssets();
             EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
-            Debug.Log("[DoodleArenaSceneBuilder] Done. Save the scene (Ctrl/Cmd+S) and press Play to test.");
+            Debug.Log("Doodle Arena: scene built. Save the scene and press Play.");
         }
 
-        // ---------- prefab construction ----------
+        // ---------- prefabs ----------
 
-        private static GameObject BuildPlayerPrefab()
+        private static GameObject BuildPlayer(GameObject shot, GameObject bottle, GameObject crate)
         {
+            const float radius = 0.28f;
             var go = new GameObject("Player");
-            var sr = go.AddComponent<SpriteRenderer>();
-            sr.sprite = GetFixedSprite("Assets/Art/Char_Player.png");
+            go.AddComponent<SpriteRenderer>().sprite = LoadArt("Assets/Art/Char_Player.png");
             var col = go.AddComponent<CircleCollider2D>();
             col.isTrigger = true;
-            col.radius = 28f;
-            go.AddComponent<PlayerController>();
-            AddShadowChild(go, 28f);
+            col.radius = radius;
+            AddShadow(go, radius);
+
+            var player = go.AddComponent<PlayerController>();
+            SetRefs(player,
+                ("rangedShotPrefab", shot.GetComponent<ProjectileController>()),
+                ("bottlePrefab", bottle.GetComponent<ProjectileController>()),
+                ("cratePrefab", crate.GetComponent<ProjectileController>()));
             return go;
         }
 
-        // radius is the real gameplay collider radius (matches EnemyController's
-        // per-kind math); the art file is expected to already be sized at 2x that
-        // (i.e. the correct on-screen diameter), not just an arbitrary placeholder size.
-        private static GameObject BuildEnemyPrefab(string label, string artPath, float radius)
+        private static GameObject BuildEnemy(string label, string artPath, float radius, GameObject shot)
         {
             var go = new GameObject("Enemy_" + label);
-            var sr = go.AddComponent<SpriteRenderer>();
-            sr.sprite = GetFixedSprite(artPath);
-            var rb = go.AddComponent<Rigidbody2D>();
-            rb.gravityScale = 0f;
-            rb.freezeRotation = true;
-            var col = go.AddComponent<CircleCollider2D>();
-            col.radius = radius;
-            var enemyController = go.AddComponent<EnemyController>();
-            AddShadowChild(go, radius);
-            AddEnemyHealthBar(go, enemyController, radius);
+            go.AddComponent<SpriteRenderer>().sprite = LoadArt(artPath);
+            AddBody(go, radius);
+            AddShadow(go, radius);
+
+            var enemy = go.AddComponent<EnemyController>();
+            AddHealthBar(go, enemy, radius);
+            if (shot) SetRefs(enemy, ("enemyShotPrefab", shot.GetComponent<ProjectileController>()));
             return go;
         }
 
-        // A small floating HP bar above the enemy, hidden until it takes damage
-        // (EnemyController.RefreshHealthBar toggles it) - this is the world-space
-        // equivalent of the original's DrawMiniHealth OnGUI call.
-        private static void AddEnemyHealthBar(GameObject enemyGO, EnemyController controller, float radius)
+        private static GameObject BuildBoss(GameObject orb)
         {
-            float width = radius * 2f;
-            float height = Mathf.Max(4f, radius * .18f);
-            float yOffset = radius + 20f;
-
-            var root = new GameObject("HealthBar");
-            root.transform.SetParent(enemyGO.transform, false);
-            root.transform.localPosition = new Vector3(0f, yOffset, -0.02f);
-            root.SetActive(false);
-
-            Sprite pixel = GetSquareSprite(1);
-
-            var backGO = new GameObject("Back");
-            backGO.transform.SetParent(root.transform, false);
-            backGO.transform.localScale = new Vector3(width, height, 1f);
-            var backSr = backGO.AddComponent<SpriteRenderer>();
-            backSr.sprite = pixel;
-            backSr.color = new Color(.15f, .13f, .17f, .9f);
-            backSr.sortingOrder = 10;
-
-            var fillGO = new GameObject("Fill");
-            fillGO.transform.SetParent(root.transform, false);
-            fillGO.transform.localScale = new Vector3(width, height, 1f);
-            var fillSr = fillGO.AddComponent<SpriteRenderer>();
-            fillSr.sprite = pixel;
-            fillSr.color = new Color(.94f, .36f, .37f, 1f);
-            fillSr.sortingOrder = 11;
-
-            var so = new SerializedObject(controller);
-            so.FindProperty("healthBarRoot").objectReferenceValue = root;
-            so.FindProperty("healthBarFill").objectReferenceValue = fillGO.transform;
-            so.FindProperty("healthBarWidth").floatValue = width;
-            so.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        private static GameObject BuildBossPrefab()
-        {
+            const float radius = 0.72f;
             var go = new GameObject("Boss_TheOverseer");
-            var sr = go.AddComponent<SpriteRenderer>();
-            sr.sprite = GetFixedSprite("Assets/Art/Char_Boss.png");
-            var rb = go.AddComponent<Rigidbody2D>();
-            rb.gravityScale = 0f;
-            rb.freezeRotation = true;
-            var col = go.AddComponent<CircleCollider2D>();
-            col.radius = 72f;
-            go.AddComponent<BossController>();
-            AddShadowChild(go, 72f);
+            go.AddComponent<SpriteRenderer>().sprite = LoadArt("Assets/Art/Char_Boss.png");
+            AddBody(go, radius);
+            AddShadow(go, radius);
+
+            var boss = go.AddComponent<BossController>();
+            SetRefs(boss, ("orbPrefab", orb.GetComponent<ProjectileController>()));
             return go;
         }
 
-        // Loads a pre-made art file (already checked into Assets/Art) and makes sure its
-        // sprite import settings match the project's 1-world-unit-per-pixel convention,
-        // the same convention the procedurally generated projectile dots use.
-        private static Sprite GetFixedSprite(string assetPath)
-        {
-            var importer = (TextureImporter)AssetImporter.GetAtPath(assetPath);
-            if (importer != null && importer.spritePixelsPerUnit != 1f)
-            {
-                importer.textureType = TextureImporterType.Sprite;
-                importer.spriteImportMode = SpriteImportMode.Single;
-                importer.spritePixelsPerUnit = 1f;
-                importer.filterMode = FilterMode.Bilinear;
-                importer.alphaIsTransparency = true;
-                importer.SaveAndReimport();
-            }
-            Sprite sprite = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
-            if (sprite == null) Debug.LogWarning("[DoodleArenaSceneBuilder] Missing art file: " + assetPath);
-            return sprite;
-        }
-
-        // A soft drop shadow behind/below the character, matching the original
-        // doodle-arena look (every character was drawn with an offset dark blob under it).
-        private static void AddShadowChild(GameObject parent, float radius)
-        {
-            var shadowSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/Char_Shadow.png");
-            if (!shadowSprite) return;
-            var shadowGO = new GameObject("Shadow");
-            shadowGO.transform.SetParent(parent.transform, false);
-            shadowGO.transform.localPosition = new Vector3(0f, -radius * .35f, 0.01f);
-            float scale = radius * 1.7f / (shadowSprite.rect.width * .5f);
-            shadowGO.transform.localScale = new Vector3(scale, scale * .55f, 1f);
-            var sr = shadowGO.AddComponent<SpriteRenderer>();
-            sr.sprite = shadowSprite;
-            sr.color = new Color(0f, 0f, 0f, .25f);
-            sr.sortingOrder = -1;
-        }
-
-        private static GameObject BuildProjectilePrefab(string label, ShotKind kind, int radius, Color color)
+        private static GameObject BuildProjectile(string label, ShotKind kind, float radius, Color color)
         {
             var go = new GameObject("Shot_" + label);
             var sr = go.AddComponent<SpriteRenderer>();
-            sr.sprite = GetCircleSprite(radius * 2);
+            sr.sprite = GetCircleSprite(Mathf.RoundToInt(radius * 2f * PixelsPerUnit));
             sr.color = color;
+
             var rb = go.AddComponent<Rigidbody2D>();
             rb.gravityScale = 0f;
             rb.bodyType = RigidbodyType2D.Kinematic;
             var col = go.AddComponent<CircleCollider2D>();
             col.isTrigger = true;
             col.radius = radius;
+
             var projectile = go.AddComponent<ProjectileController>();
             var so = new SerializedObject(projectile);
             so.FindProperty("kind").enumValueIndex = (int)kind;
@@ -205,204 +119,241 @@ namespace DoodleArena.Editor
             return go;
         }
 
-        private static GameObject BuildCratePrefab()
+        private static GameObject BuildCrate()
         {
-            var go = BuildProjectilePrefab("Crate", ShotKind.Crate, 23, new Color(.96f, .78f, .37f));
-            var sr = go.GetComponent<SpriteRenderer>();
-            sr.sprite = GetSquareSprite(46);
+            const float radius = 0.23f;
+            var go = BuildProjectile("Crate", ShotKind.Crate, radius, Palette.Gold);
+            go.GetComponent<SpriteRenderer>().sprite = GetSquareSprite(Mathf.RoundToInt(radius * 2f * PixelsPerUnit));
             return go;
         }
 
-        private static void WireEnemyShot(GameObject enemyPrefabGO, GameObject shotPrefabGO)
+        private static void AddBody(GameObject go, float radius)
         {
-            var enemy = enemyPrefabGO.GetComponent<EnemyController>();
-            if (!enemy || !shotPrefabGO) return;
+            var rb = go.AddComponent<Rigidbody2D>();
+            rb.gravityScale = 0f;
+            rb.freezeRotation = true;
+            go.AddComponent<CircleCollider2D>().radius = radius;
+        }
+
+        // Soft dark blob under each character.
+        private static void AddShadow(GameObject parent, float radius)
+        {
+            Sprite shadow = LoadArt("Assets/Art/Char_Shadow.png");
+            if (!shadow) return;
+
+            var go = new GameObject("Shadow");
+            go.transform.SetParent(parent.transform, false);
+            go.transform.localPosition = new Vector3(0f, -radius * 0.35f, 0.01f);
+            float scale = radius * 1.7f / (shadow.bounds.size.x * 0.5f);
+            go.transform.localScale = new Vector3(scale, scale * 0.55f, 1f);
+
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = shadow;
+            sr.color = new Color(0f, 0f, 0f, 0.25f);
+            sr.sortingOrder = -1;
+        }
+
+        // Small bar above the enemy, only visible once it has taken damage.
+        private static void AddHealthBar(GameObject enemyGO, EnemyController enemy, float radius)
+        {
+            float width = radius * 2f;
+            float height = Mathf.Max(0.04f, radius * 0.18f);
+
+            var root = new GameObject("HealthBar");
+            root.transform.SetParent(enemyGO.transform, false);
+            root.transform.localPosition = new Vector3(0f, radius + 0.2f, -0.02f);
+            root.SetActive(false);
+
+            Sprite unit = GetUnitSquareSprite();
+            MakeBarPiece(root.transform, "Back", unit, width, height, new Color(Palette.Ink.r, Palette.Ink.g, Palette.Ink.b, 0.9f), 10);
+            Transform fill = MakeBarPiece(root.transform, "Fill", unit, width, height, Palette.Red, 11);
+
             var so = new SerializedObject(enemy);
-            so.FindProperty("enemyShotPrefab").objectReferenceValue = shotPrefabGO.GetComponent<ProjectileController>();
+            so.FindProperty("healthBarRoot").objectReferenceValue = root;
+            so.FindProperty("healthBarFill").objectReferenceValue = fill;
+            so.FindProperty("healthBarWidth").floatValue = width;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        private static void WireBossOrb(GameObject bossPrefabGO, GameObject orbPrefabGO)
+        private static Transform MakeBarPiece(Transform parent, string name, Sprite sprite, float width, float height, Color color, int order)
         {
-            var boss = bossPrefabGO.GetComponent<BossController>();
-            if (!boss || !orbPrefabGO) return;
-            var so = new SerializedObject(boss);
-            so.FindProperty("orbPrefab").objectReferenceValue = orbPrefabGO.GetComponent<ProjectileController>();
-            so.ApplyModifiedPropertiesWithoutUndo();
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.transform.localScale = new Vector3(width, height, 1f);
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite = sprite;
+            sr.color = color;
+            sr.sortingOrder = order;
+            return go.transform;
         }
 
-        private static void WirePlayerShots(GameObject playerPrefabGO, GameObject shotGO, GameObject bottleGO, GameObject crateGO)
+        private static GameObject SavePrefab(GameObject go, string prefabName)
         {
-            var player = playerPrefabGO.GetComponent<PlayerController>();
-            if (!player) return;
-            var so = new SerializedObject(player);
-            so.FindProperty("rangedShotPrefab").objectReferenceValue = shotGO.GetComponent<ProjectileController>();
-            so.FindProperty("bottlePrefab").objectReferenceValue = bottleGO.GetComponent<ProjectileController>();
-            so.FindProperty("cratePrefab").objectReferenceValue = crateGO.GetComponent<ProjectileController>();
-            so.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        private static GameObject SaveAndDestroy(GameObject go, string prefabName)
-        {
-            string path = PrefabFolder + "/" + prefabName + ".prefab";
-            GameObject asset = PrefabUtility.SaveAsPrefabAsset(go, path);
+            GameObject asset = PrefabUtility.SaveAsPrefabAsset(go, PrefabFolder + "/" + prefabName + ".prefab");
             Object.DestroyImmediate(go);
             return asset;
         }
 
-        // ---------- sprite generation ----------
+        private static void SetRefs(Object target, params (string field, Object value)[] refs)
+        {
+            var so = new SerializedObject(target);
+            foreach (var (field, value) in refs) so.FindProperty(field).objectReferenceValue = value;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // ---------- sprites ----------
+
+        private static Sprite LoadArt(string path)
+        {
+            ConfigureSpriteImporter(path, PixelsPerUnit);
+            Sprite sprite = AssetDatabase.LoadAssetAtPath<Sprite>(path);
+            if (sprite == null) Debug.LogWarning("Doodle Arena: missing art file " + path);
+            return sprite;
+        }
 
         private static Sprite GetCircleSprite(int diameter)
         {
-            // No in-memory cache here on purpose: this always checks the AssetDatabase
-            // (the actual project state on disk) rather than trusting a static field,
-            // which previously masked a stale-recompile bug by returning old data.
             string path = SpriteFolder + "/Circle_" + diameter + ".png";
-            Sprite existing = AssetDatabase.LoadAssetAtPath<Sprite>(path);
-            if (existing) return existing;
-
-            Texture2D tex = MakeCircleTexture(diameter);
-            byte[] png = tex.EncodeToPNG();
-            Object.DestroyImmediate(tex);
-            File.WriteAllBytes(Path.GetFullPath(path), png);
-            AssetDatabase.ImportAsset(path);
-            ConfigureSpriteImporter(path);
+            if (!File.Exists(path)) WriteTexture(path, MakeCircleTexture(diameter));
+            ConfigureSpriteImporter(path, PixelsPerUnit);
             return AssetDatabase.LoadAssetAtPath<Sprite>(path);
         }
 
         private static Sprite GetSquareSprite(int size)
         {
             string path = SpriteFolder + "/Square_" + size + ".png";
-            Sprite existing = AssetDatabase.LoadAssetAtPath<Sprite>(path);
-            if (existing) return existing;
-
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
-            var pixels = new Color32[size * size];
-            for (int i = 0; i < pixels.Length; i++) pixels[i] = new Color32(255, 255, 255, 255);
-            tex.SetPixels32(pixels);
-            tex.Apply();
-            byte[] png = tex.EncodeToPNG();
-            Object.DestroyImmediate(tex);
-            File.WriteAllBytes(Path.GetFullPath(path), png);
-            AssetDatabase.ImportAsset(path);
-            ConfigureSpriteImporter(path);
+            if (!File.Exists(path)) WriteTexture(path, MakeSolidTexture(size));
+            ConfigureSpriteImporter(path, PixelsPerUnit);
             return AssetDatabase.LoadAssetAtPath<Sprite>(path);
         }
 
-        private static void ConfigureSpriteImporter(string path)
+        // 1x1 world unit, so a transform's scale equals its size in world units.
+        // Also used as the fill sprite for UI bars (Filled images need a sprite).
+        private static Sprite GetUnitSquareSprite()
         {
-            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+            string path = SpriteFolder + "/Square_Unit.png";
+            if (!File.Exists(path)) WriteTexture(path, MakeSolidTexture(4));
+            ConfigureSpriteImporter(path, 4f);
+            return AssetDatabase.LoadAssetAtPath<Sprite>(path);
+        }
+
+        private static void WriteTexture(string path, Texture2D tex)
+        {
+            File.WriteAllBytes(Path.GetFullPath(path), tex.EncodeToPNG());
+            Object.DestroyImmediate(tex);
+            AssetDatabase.ImportAsset(path);
+        }
+
+        private static void ConfigureSpriteImporter(string path, float ppu)
+        {
+            var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (importer == null) return;
+            if (importer.textureType == TextureImporterType.Sprite && Mathf.Approximately(importer.spritePixelsPerUnit, ppu)) return;
+
             importer.textureType = TextureImporterType.Sprite;
             importer.spriteImportMode = SpriteImportMode.Single;
-            importer.spritePixelsPerUnit = 1f; // 1 world unit per pixel, matching the original pixel-space gameplay numbers
+            importer.spritePixelsPerUnit = ppu;
             importer.filterMode = FilterMode.Bilinear;
             importer.alphaIsTransparency = true;
             importer.mipmapEnabled = false;
-            importer.textureCompression = TextureImporterCompression.Uncompressed;
             importer.SaveAndReimport();
         }
 
         private static Texture2D MakeCircleTexture(int size)
         {
-            var t = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
             var pixels = new Color32[size * size];
-            float half = size * .5f;
+            float half = size * 0.5f;
             for (int y = 0; y < size; y++)
                 for (int x = 0; x < size; x++)
                 {
-                    float d = Vector2.Distance(new Vector2(x + .5f, y + .5f), new Vector2(half, half));
-                    byte a = (byte)Mathf.Clamp((half - d) * 255f, 0, 255);
-                    pixels[y * size + x] = new Color32(255, 255, 255, a);
+                    float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(half, half));
+                    byte alpha = (byte)Mathf.Clamp((half - d) * 255f, 0, 255); // 1px soft edge
+                    pixels[y * size + x] = new Color32(255, 255, 255, alpha);
                 }
-            t.SetPixels32(pixels);
-            t.Apply();
-            return t;
+            tex.SetPixels32(pixels);
+            tex.Apply();
+            return tex;
+        }
+
+        private static Texture2D MakeSolidTexture(int size)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            var pixels = new Color32[size * size];
+            for (int i = 0; i < pixels.Length; i++) pixels[i] = new Color32(255, 255, 255, 255);
+            tex.SetPixels32(pixels);
+            tex.Apply();
+            return tex;
         }
 
         private static Material GetOrCreateParticleMaterial(Sprite sprite)
         {
             string path = SpriteFolder + "/BurstParticleMaterial.mat";
-            Material existing = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (existing)
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (mat == null)
             {
-                // Keep it pointed at the current sprite's texture even on a re-run
-                // (an earlier run may have created this against a since-replaced texture).
-                existing.mainTexture = sprite.texture;
-                EditorUtility.SetDirty(existing);
-                return existing;
+                mat = new Material(Shader.Find("Sprites/Default"));
+                AssetDatabase.CreateAsset(mat, path);
             }
-            var shader = Shader.Find("Sprites/Default");
-            var mat = new Material(shader) { mainTexture = sprite.texture };
-            AssetDatabase.CreateAsset(mat, path);
+            mat.mainTexture = sprite.texture;
+            EditorUtility.SetDirty(mat);
             return mat;
         }
 
-        // ---------- scene assembly ----------
+        // ---------- scene ----------
 
-        private static void BuildRuntimeScene(GameObject playerPrefab, GameObject chaserPrefab, GameObject shooterPrefab,
+        private static void BuildSceneObjects(GameObject playerPrefab, GameObject chaserPrefab, GameObject shooterPrefab,
             GameObject tankPrefab, GameObject bossPrefab, Material particleMaterial)
         {
-            Rect arena = new Rect(-728f, -350f, 1456f, 700f);
+            // Rebuild from scratch each time rather than patching whatever is there;
+            // half-built leftovers from an earlier failed run caused problems.
+            // The camera is kept because it carries the URP template's settings.
+            foreach (var name in new[] { "GameManager", "EnemySpawner", "Player", "HitBurst", "Canvas", "EventSystem", "Doodle Arena Game" })
+                DestroyIfExists(name);
 
-            // A prior run of this builder can crash partway through and leave stale,
-            // half-configured objects behind (e.g. a "HitBurst" with no ParticleSystem
-            // yet, or a GameManager with unset fields). Reusing those via GetComponent
-            // ?? AddComponent is unreliable (Unity's "fake null" semantics on
-            // UnityEngine.Object make the ?? check misbehave) and lets corruption from
-            // one failed run poison the next. So every managed object here is fully
-            // destroyed and recreated from scratch on every run. Only Main Camera is
-            // reused/reconfigured, since destroying it can lose template-provided
-            // camera components/settings.
-            DestroyIfExists("GameManager");
-            DestroyIfExists("EnemySpawner");
-            DestroyIfExists("Player");
-            DestroyIfExists("HitBurst");
+            var gm = new GameObject("GameManager").AddComponent<GameManager>();
+            gm.arena = Arena;
 
-            var gmGO = new GameObject("GameManager");
-            var gm = gmGO.AddComponent<GameManager>();
-            gm.arena = arena;
+            var spawner = new GameObject("EnemySpawner").AddComponent<EnemySpawner>();
+            SetRefs(spawner,
+                ("chaserPrefab", chaserPrefab.GetComponent<EnemyController>()),
+                ("shooterPrefab", shooterPrefab.GetComponent<EnemyController>()),
+                ("tankPrefab", tankPrefab.GetComponent<EnemyController>()),
+                ("bossPrefab", bossPrefab.GetComponent<BossController>()));
 
-            var spawnerGO = new GameObject("EnemySpawner");
-            var spawner = spawnerGO.AddComponent<EnemySpawner>();
-            var spawnerSO = new SerializedObject(spawner);
-            spawnerSO.FindProperty("chaserPrefab").objectReferenceValue = chaserPrefab.GetComponent<EnemyController>();
-            spawnerSO.FindProperty("shooterPrefab").objectReferenceValue = shooterPrefab.GetComponent<EnemyController>();
-            spawnerSO.FindProperty("tankPrefab").objectReferenceValue = tankPrefab.GetComponent<EnemyController>();
-            spawnerSO.FindProperty("bossPrefab").objectReferenceValue = bossPrefab.GetComponent<BossController>();
-            spawnerSO.ApplyModifiedPropertiesWithoutUndo();
-
-            var playerGO = (GameObject)PrefabUtility.InstantiatePrefab(playerPrefab);
-            playerGO.name = "Player";
-            playerGO.transform.position = arena.center;
+            var player = (GameObject)PrefabUtility.InstantiatePrefab(playerPrefab);
+            player.name = "Player";
+            player.transform.position = Arena.center;
 
             var burstGO = new GameObject("HitBurst");
             var ps = burstGO.AddComponent<ParticleSystem>();
-            ConfigureBurstParticleSystem(ps, particleMaterial);
+            var psRenderer = ps.GetComponent<ParticleSystemRenderer>();
+            psRenderer.renderMode = ParticleSystemRenderMode.Billboard;
+            psRenderer.sharedMaterial = particleMaterial;
             var burst = burstGO.AddComponent<BurstEmitter>();
 
             Camera cam = Camera.main;
-            GameObject camGO;
             if (cam == null)
             {
-                camGO = new GameObject("Main Camera");
+                var camGO = new GameObject("Main Camera") { tag = "MainCamera" };
                 cam = camGO.AddComponent<Camera>();
-                camGO.tag = "MainCamera";
             }
-            else camGO = cam.gameObject;
             cam.orthographic = true;
-            cam.orthographicSize = arena.height * .5f + 40f;
-            camGO.transform.position = new Vector3(arena.center.x, arena.center.y, -10f);
-            CameraShake camShake = camGO.GetComponent<CameraShake>();
-            if (camShake == null) camShake = camGO.AddComponent<CameraShake>();
+            // GameManager refits this at runtime for the actual window shape; 16:9 here
+            cam.orthographicSize = Mathf.Max(Arena.height * 0.5f, Arena.width * 0.5f * 9f / 16f) + 0.4f;
+            cam.transform.position = new Vector3(Arena.center.x, Arena.center.y, -10f);
+            var shake = cam.GetComponent<CameraShake>();
+            if (shake == null) shake = cam.gameObject.AddComponent<CameraShake>();
 
-            HUDController hud = BuildCanvas(arena);
+            HUDController hud = BuildCanvas();
 
             var gmSO = new SerializedObject(gm);
-            gmSO.FindProperty("player").objectReferenceValue = playerGO.GetComponent<PlayerController>();
+            gmSO.FindProperty("player").objectReferenceValue = player.GetComponent<PlayerController>();
             gmSO.FindProperty("spawner").objectReferenceValue = spawner;
             gmSO.FindProperty("hud").objectReferenceValue = hud;
-            gmSO.FindProperty("cameraShake").objectReferenceValue = camShake;
+            gmSO.FindProperty("cameraShake").objectReferenceValue = shake;
             gmSO.FindProperty("burst").objectReferenceValue = burst;
+            gmSO.FindProperty("inputActions").objectReferenceValue = AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath);
             gmSO.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -412,198 +363,188 @@ namespace DoodleArena.Editor
             if (found != null) Object.DestroyImmediate(found);
         }
 
-        private static void ConfigureBurstParticleSystem(ParticleSystem ps, Material material)
-        {
-            // Module setup (simulationSpace, playOnAwake, emission rate, etc.) is done
-            // by BurstEmitter.Awake() at runtime instead of here: touching ps.main /
-            // ps.emission immediately after AddComponent<ParticleSystem>() inside an
-            // editor script throws "Do not create your own module instances" in this
-            // Unity version. Assigning the renderer's material is a plain object
-            // reference assignment, so that part is safe to do here.
-            var renderer = ps.GetComponent<ParticleSystemRenderer>();
-            if (renderer)
-            {
-                renderer.renderMode = ParticleSystemRenderMode.Billboard;
-                renderer.sharedMaterial = material;
-            }
-        }
+        // ---------- HUD ----------
+        // Layout is in a 1600x900 reference canvas. Each element is anchored to the
+        // part of the screen it belongs to (corner, top edge or centre), so it stays
+        // put when the window isn't 16:9.
 
-        private static HUDController BuildCanvas(Rect arena)
-        {
-            // Same reasoning as BuildRuntimeScene: never reuse a Canvas/EventSystem
-            // that might be left over from an earlier crashed run. Build fresh every time.
-            DestroyIfExists("Canvas");
-            var existingEventSystem = Object.FindFirstObjectByType<EventSystem>();
-            if (existingEventSystem != null) Object.DestroyImmediate(existingEventSystem.gameObject);
+        private static readonly Vector2 TopLeft = new Vector2(0f, 1f);
+        private static readonly Vector2 TopCenter = new Vector2(0.5f, 1f);
+        private static readonly Vector2 TopRight = new Vector2(1f, 1f);
+        private static readonly Vector2 Center = new Vector2(0.5f, 0.5f);
 
+        private static HUDController BuildCanvas()
+        {
             var canvasGO = new GameObject("Canvas");
-            var canvas = canvasGO.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvasGO.AddComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
             var scaler = canvasGO.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1600, 900);
+            scaler.matchWidthOrHeight = 0.5f;
             canvasGO.AddComponent<GraphicRaycaster>();
 
-            var esGO = new GameObject("EventSystem");
-            esGO.AddComponent<EventSystem>();
-            esGO.AddComponent<InputSystemUIInputModule>();
+            var eventSystem = new GameObject("EventSystem");
+            eventSystem.AddComponent<EventSystem>();
+            eventSystem.AddComponent<InputSystemUIInputModule>();
 
+            Transform root = canvasGO.transform;
             var hud = canvasGO.AddComponent<HUDController>();
-            var hudSO = new SerializedObject(hud);
 
-            GameObject titlePanel = CreatePanel(canvasGO.transform, "TitlePanel", new Color(.96f, .93f, .87f, 1f));
-            CreateText(titlePanel.transform, "Subtitle", "Punch. Throw. Survive the page.", 27, new Rect(360, 130, 880, 50));
-            CreateText(titlePanel.transform, "Controls", "MOVE  WASD / ARROWS     ATTACK  J     DASH  K     ITEMS  I / O", 20, new Rect(300, 430, 1000, 44));
-            CreateButtonLikeText(titlePanel.transform, "StartHint", "PRESS ENTER TO FIGHT", new Rect(610, 530, 380, 70));
+            // title screen
+            GameObject title = CreatePanel(root, "TitlePanel", Palette.Paper);
+            CreateText(title.transform, "Title", "DOODLE ARENA", 72, Center, new Vector2(0, 190), new Vector2(1000, 100));
+            CreateText(title.transform, "Subtitle", "Punch. Throw. Survive the page.", 27, Center, new Vector2(0, 110), new Vector2(880, 50));
+            CreateText(title.transform, "Controls", "MOVE  WASD / ARROWS     ATTACK  J     DASH  K     ITEMS  I / O", 20, Center, new Vector2(0, -10), new Vector2(1000, 44));
+            CreateButton(title.transform, "StartHint", "PRESS ENTER TO FIGHT", Center, new Vector2(0, -115));
 
-            GameObject gamePanel = CreatePanel(canvasGO.transform, "GamePanel", new Color(0, 0, 0, 0));
-            Text roundWaveText = CreateText(gamePanel.transform, "RoundWaveText", "ROUND 1   WAVE 1/3", 25, new Rect(560, 28, 480, 42));
-            Text scoreText = CreateText(gamePanel.transform, "ScoreText", "000000", 25, new Rect(1235, 28, 292, 42));
-            Image healthBack = CreateImage(gamePanel.transform, "HealthBarBack", new Rect(72, 72, 360, 26), new Color(.15f, .13f, .17f));
-            Image healthFill = CreateFillImage(gamePanel.transform, "HealthBarFill", new Rect(72, 72, 360, 26), new Color(.94f, .36f, .37f));
-            Text healthLabel = CreateText(gamePanel.transform, "HealthLabel", "HP 100", 18, new Rect(72, 70, 360, 30));
-            Text statusText = CreateText(gamePanel.transform, "StatusText", "K READY     I x3     O x2", 20, new Rect(1020, 68, 507, 38));
-            Text comboText = CreateText(gamePanel.transform, "ComboText", "x3 COMBO", 20, new Rect(675, 66, 250, 38));
-            comboText.color = new Color(.94f, .36f, .37f);
+            // in-game HUD
+            GameObject game = CreatePanel(root, "GamePanel", Color.clear);
+            Image vignette = CreateImage(game.transform, "LowHealthVignette", Center, Vector2.zero, Vector2.zero, new Color(Palette.Red.r, Palette.Red.g, Palette.Red.b, 0f));
+            Stretch(vignette.rectTransform);
+            vignette.raycastTarget = false;
 
-            GameObject bossPanel = CreatePanel(gamePanel.transform, "BossHealthPanel", new Color(0, 0, 0, 0));
-            CreateImage(bossPanel.transform, "BossBarBack", new Rect(510, 135, 580, 25), new Color(.15f, .13f, .17f));
-            Image bossFill = CreateFillImage(bossPanel.transform, "BossBarFill", new Rect(510, 135, 580, 25), new Color(.42f, .29f, .71f));
-            CreateText(bossPanel.transform, "BossLabel", "THE OVERSEER", 16, new Rect(510, 133, 580, 29));
+            CreateImage(game.transform, "HealthBarBack", TopLeft, new Vector2(72, -72), new Vector2(360, 26), Palette.Ink);
+            Image healthFill = CreateFillImage(game.transform, "HealthBarFill", TopLeft, new Vector2(72, -72), new Vector2(360, 26), Palette.Red);
+            Text healthLabel = CreateText(game.transform, "HealthLabel", "HP 100", 18, TopLeft, new Vector2(72, -70), new Vector2(360, 30));
+            healthLabel.color = Palette.Paper;
 
-            GameObject lowHealthGO = CreateImage(gamePanel.transform, "LowHealthVignette", new Rect(0, 0, 1600, 900), new Color(.94f, .36f, .37f, 0f)).gameObject;
+            Text roundWave = CreateText(game.transform, "RoundWaveText", "ROUND 1/3   WAVE 1/3", 25, TopCenter, new Vector2(0, -28), new Vector2(520, 42));
+            Text combo = CreateText(game.transform, "ComboText", "x3 COMBO", 20, TopCenter, new Vector2(0, -70), new Vector2(250, 38));
+            combo.color = Palette.Red;
 
-            GameObject bannerPanel = CreatePanel(canvasGO.transform, "BannerPanel", new Color(.15f, .13f, .17f, .94f));
-            SetRect(bannerPanel.GetComponent<RectTransform>(), new Rect(405, 380, 790, 108));
-            Text bannerText = CreateText(bannerPanel.transform, "BannerText", "WAVE CLEARED", 40, new Rect(0, 0, 790, 108));
-            bannerText.color = new Color(.96f, .93f, .87f);
+            Text score = CreateText(game.transform, "ScoreText", "000000", 25, TopRight, new Vector2(-72, -28), new Vector2(300, 42));
+            score.alignment = TextAnchor.MiddleRight;
+            Text status = CreateText(game.transform, "StatusText", "K READY     I x3     O x2", 20, TopRight, new Vector2(-72, -70), new Vector2(500, 38));
+            status.alignment = TextAnchor.MiddleRight;
 
-            GameObject gameOverPanel = CreatePanel(canvasGO.transform, "GameOverPanel", new Color(.96f, .93f, .87f, .92f));
-            CreateText(gameOverPanel.transform, "Title", "INKED OUT!", 60, new Rect(260, 245, 1080, 100));
-            Text gameOverScore = CreateText(gameOverPanel.transform, "Score", "FINAL SCORE  000000", 40, new Rect(450, 390, 700, 55));
-            CreateText(gameOverPanel.transform, "Subtitle", "The doodles got you this time.", 24, new Rect(470, 475, 660, 42));
-            CreateButtonLikeText(gameOverPanel.transform, "RetryHint", "PRESS R TO TRY AGAIN", new Rect(610, 605, 380, 70));
+            GameObject bossPanel = CreatePanel(game.transform, "BossHealthPanel", Color.clear);
+            CreateImage(bossPanel.transform, "BossBarBack", TopCenter, new Vector2(0, -135), new Vector2(580, 25), Palette.Ink);
+            Image bossFill = CreateFillImage(bossPanel.transform, "BossBarFill", TopCenter, new Vector2(0, -135), new Vector2(580, 25), Palette.Purple);
+            Text bossLabel = CreateText(bossPanel.transform, "BossLabel", "THE OVERSEER", 16, TopCenter, new Vector2(0, -133), new Vector2(580, 29));
+            bossLabel.color = Palette.Paper;
 
-            GameObject victoryPanel = CreatePanel(canvasGO.transform, "VictoryPanel", new Color(.96f, .93f, .87f, .92f));
-            CreateText(victoryPanel.transform, "Title", "YOU RULE THE PAGE!", 60, new Rect(260, 245, 1080, 100));
-            Text victoryScore = CreateText(victoryPanel.transform, "Score", "FINAL SCORE  000000", 40, new Rect(450, 390, 700, 55));
-            CreateText(victoryPanel.transform, "Subtitle", "Three bosses down. The arena is yours.", 24, new Rect(470, 475, 660, 42));
-            CreateButtonLikeText(victoryPanel.transform, "RetryHint", "PRESS R TO TRY AGAIN", new Rect(610, 605, 380, 70));
+            // wave banner
+            Image bannerBack = CreateImage(root, "BannerPanel", Center, Vector2.zero, new Vector2(790, 108), new Color(Palette.Ink.r, Palette.Ink.g, Palette.Ink.b, 0.94f));
+            Text banner = CreateText(bannerBack.transform, "BannerText", "WAVE CLEARED", 40, Center, Vector2.zero, new Vector2(790, 108));
+            banner.color = Palette.Paper;
 
-            hudSO.FindProperty("titlePanel").objectReferenceValue = titlePanel;
-            hudSO.FindProperty("gamePanel").objectReferenceValue = gamePanel;
-            hudSO.FindProperty("gameOverPanel").objectReferenceValue = gameOverPanel;
-            hudSO.FindProperty("victoryPanel").objectReferenceValue = victoryPanel;
-            hudSO.FindProperty("bannerPanel").objectReferenceValue = bannerPanel;
-            hudSO.FindProperty("bossHealthPanel").objectReferenceValue = bossPanel;
-            hudSO.FindProperty("lowHealthVignette").objectReferenceValue = lowHealthGO;
-            hudSO.FindProperty("roundWaveText").objectReferenceValue = roundWaveText;
-            hudSO.FindProperty("scoreText").objectReferenceValue = scoreText;
-            hudSO.FindProperty("comboText").objectReferenceValue = comboText;
-            hudSO.FindProperty("statusText").objectReferenceValue = statusText;
-            hudSO.FindProperty("healthFill").objectReferenceValue = healthFill;
-            hudSO.FindProperty("healthLabel").objectReferenceValue = healthLabel;
-            hudSO.FindProperty("bossHealthFill").objectReferenceValue = bossFill;
-            hudSO.FindProperty("bannerText").objectReferenceValue = bannerText;
-            hudSO.FindProperty("gameOverScoreText").objectReferenceValue = gameOverScore;
-            hudSO.FindProperty("victoryScoreText").objectReferenceValue = victoryScore;
-            hudSO.ApplyModifiedPropertiesWithoutUndo();
+            // end screens
+            GameObject gameOver = BuildEndScreen(root, "GameOverPanel", "INKED OUT!", "The doodles got you this time.", out Text gameOverScore);
+            GameObject victory = BuildEndScreen(root, "VictoryPanel", "YOU RULE THE PAGE!", "Three bosses down. The arena is yours.", out Text victoryScore);
 
-            healthBack.gameObject.SetActive(true);
+            var so = new SerializedObject(hud);
+            so.FindProperty("titlePanel").objectReferenceValue = title;
+            so.FindProperty("gamePanel").objectReferenceValue = game;
+            so.FindProperty("gameOverPanel").objectReferenceValue = gameOver;
+            so.FindProperty("victoryPanel").objectReferenceValue = victory;
+            so.FindProperty("bannerPanel").objectReferenceValue = bannerBack.gameObject;
+            so.FindProperty("bossHealthPanel").objectReferenceValue = bossPanel;
+            so.FindProperty("lowHealthVignette").objectReferenceValue = vignette;
+            so.FindProperty("roundWaveText").objectReferenceValue = roundWave;
+            so.FindProperty("scoreText").objectReferenceValue = score;
+            so.FindProperty("comboText").objectReferenceValue = combo;
+            so.FindProperty("statusText").objectReferenceValue = status;
+            so.FindProperty("healthFill").objectReferenceValue = healthFill;
+            so.FindProperty("healthLabel").objectReferenceValue = healthLabel;
+            so.FindProperty("bossHealthFill").objectReferenceValue = bossFill;
+            so.FindProperty("bannerText").objectReferenceValue = banner;
+            so.FindProperty("gameOverScoreText").objectReferenceValue = gameOverScore;
+            so.FindProperty("victoryScoreText").objectReferenceValue = victoryScore;
+            so.ApplyModifiedPropertiesWithoutUndo();
 
-            // Leave the scene in the same resting state the game itself starts in
-            // (title screen only) instead of all panels sitting active at once.
-            // ShowTitle() is the same public method the game calls at runtime;
-            // calling it here just means the Scene view isn't misleading before Play.
-            hud.ShowTitle();
-
+            hud.ShowTitle(); // leave the scene looking like it does when the game starts
             return hud;
         }
 
-        // ---------- small UI helpers (Rects are top-left-origin, in a 1600x900 reference canvas) ----------
+        private static GameObject BuildEndScreen(Transform root, string name, string heading, string subtitle, out Text scoreText)
+        {
+            var bg = Palette.Paper;
+            bg.a = 0.92f;
+            GameObject panel = CreatePanel(root, name, bg);
+            CreateText(panel.transform, "Title", heading, 60, Center, new Vector2(0, 155), new Vector2(1080, 100));
+            scoreText = CreateText(panel.transform, "Score", "FINAL SCORE  000000", 40, Center, new Vector2(0, 32), new Vector2(700, 55));
+            CreateText(panel.transform, "Subtitle", subtitle, 24, Center, new Vector2(0, -46), new Vector2(700, 42));
+            CreateButton(panel.transform, "RetryHint", "PRESS R TO TRY AGAIN", Center, new Vector2(0, -190));
+            return panel;
+        }
 
         private static GameObject CreatePanel(Transform parent, string name, Color background)
         {
             var go = new GameObject(name, typeof(RectTransform));
             go.transform.SetParent(parent, false);
-            var rt = go.GetComponent<RectTransform>();
+            Stretch(go.GetComponent<RectTransform>());
+            if (background.a > 0f) go.AddComponent<Image>().color = background;
+            return go;
+        }
+
+        private static void Stretch(RectTransform rt)
+        {
             rt.anchorMin = Vector2.zero;
             rt.anchorMax = Vector2.one;
             rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
-            if (background.a > 0f)
-            {
-                var img = go.AddComponent<Image>();
-                img.color = background;
-            }
-            return go;
         }
 
-        private static RectTransform SetRect(RectTransform rt, Rect r)
+        // Pivot matches the anchor, so `position` is measured from that corner/edge.
+        private static RectTransform Place(GameObject go, Transform parent, Vector2 anchor, Vector2 position, Vector2 size)
         {
-            rt.anchorMin = new Vector2(0, 1);
-            rt.anchorMax = new Vector2(0, 1);
-            rt.pivot = new Vector2(0, 1);
-            rt.anchoredPosition = new Vector2(r.x, -r.y);
-            rt.sizeDelta = new Vector2(r.width, r.height);
+            go.transform.SetParent(parent, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = rt.pivot = anchor;
+            rt.anchoredPosition = position;
+            rt.sizeDelta = size;
             return rt;
         }
 
-        private static Text CreateText(Transform parent, string name, string content, int fontSize, Rect rect)
+        private static Text CreateText(Transform parent, string name, string content, int fontSize, Vector2 anchor, Vector2 position, Vector2 size)
         {
             var go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(parent, false);
-            SetRect(go.GetComponent<RectTransform>(), rect);
+            Place(go, parent, anchor, position, size);
             var text = go.AddComponent<Text>();
             text.text = content;
             text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             text.fontSize = fontSize;
             text.alignment = TextAnchor.MiddleCenter;
-            text.color = new Color(.15f, .13f, .17f);
+            text.color = Palette.Ink;
+            text.raycastTarget = false;
             return text;
         }
 
-        private static Text CreateButtonLikeText(Transform parent, string name, string content, Rect rect)
-        {
-            var back = CreateImage(parent, name + "Back", rect, new Color(.94f, .36f, .37f));
-            var text = CreateText(back.transform, name + "Label", content, 27, new Rect(0, 0, rect.width, rect.height));
-            text.color = new Color(.96f, .93f, .87f);
-            return text;
-        }
-
-        private static Image CreateImage(Transform parent, string name, Rect rect, Color color)
+        private static Image CreateImage(Transform parent, string name, Vector2 anchor, Vector2 position, Vector2 size, Color color)
         {
             var go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(parent, false);
-            SetRect(go.GetComponent<RectTransform>(), rect);
+            Place(go, parent, anchor, position, size);
             var img = go.AddComponent<Image>();
             img.color = color;
             return img;
         }
 
-        private static Image CreateFillImage(Transform parent, string name, Rect rect, Color color)
+        // Filled images only respect fillAmount when they have a sprite assigned.
+        private static Image CreateFillImage(Transform parent, string name, Vector2 anchor, Vector2 position, Vector2 size, Color color)
         {
-            Image img = CreateImage(parent, name, rect, color);
-            // Image.Type.Filled only computes a partial mesh when it has an actual
-            // Sprite assigned - with sprite == null, Unity's Image.OnPopulateMesh
-            // falls back to always drawing the full rect regardless of fillAmount,
-            // which is why the health bar's length wasn't visually responding to
-            // damage even though fillAmount was being set correctly every frame.
-            img.sprite = GetSquareSprite(1);
+            Image img = CreateImage(parent, name, anchor, position, size, color);
+            img.sprite = GetUnitSquareSprite();
             img.type = Image.Type.Filled;
             img.fillMethod = Image.FillMethod.Horizontal;
-            img.fillOrigin = 0;
+            img.fillOrigin = (int)Image.OriginHorizontal.Left;
             img.fillAmount = 1f;
             return img;
+        }
+
+        private static void CreateButton(Transform parent, string name, string label, Vector2 anchor, Vector2 position)
+        {
+            var size = new Vector2(380, 70);
+            Image back = CreateImage(parent, name, anchor, position, size, Palette.Red);
+            Text text = CreateText(back.transform, "Label", label, 27, Center, Vector2.zero, size);
+            text.color = Palette.Paper;
         }
 
         private static void EnsureFolder(string path)
         {
             if (AssetDatabase.IsValidFolder(path)) return;
             string parent = Path.GetDirectoryName(path)?.Replace('\\', '/');
-            string leaf = Path.GetFileName(path);
             if (!string.IsNullOrEmpty(parent) && !AssetDatabase.IsValidFolder(parent)) EnsureFolder(parent);
-            AssetDatabase.CreateFolder(parent, leaf);
+            AssetDatabase.CreateFolder(parent, Path.GetFileName(path));
         }
     }
 }

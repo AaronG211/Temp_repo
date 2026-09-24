@@ -3,10 +3,8 @@ using UnityEngine.UI;
 
 namespace DoodleArena
 {
-    // Aijia owns this file: every visual that used to be a GUI.DrawTexture /
-    // GUI.Label call inside OnGUI (health bar, score, banners, title/game-over/
-    // victory screens) is now a real Canvas with Image / Text components that
-    // this script updates instead of redrawing from scratch every frame.
+    // Switches between the title / in-game / game over / victory panels and keeps
+    // the in-game HUD (HP, score, combo, items, boss bar) up to date.
     public class HUDController : MonoBehaviour
     {
         [Header("Panels")]
@@ -16,7 +14,7 @@ namespace DoodleArena
         [SerializeField] private GameObject victoryPanel;
         [SerializeField] private GameObject bannerPanel;
         [SerializeField] private GameObject bossHealthPanel;
-        [SerializeField] private GameObject lowHealthVignette;
+        [SerializeField] private Image lowHealthVignette;
 
         [Header("Game HUD")]
         [SerializeField] private Text roundWaveText;
@@ -32,13 +30,10 @@ namespace DoodleArena
         [SerializeField] private Text gameOverScoreText;
         [SerializeField] private Text victoryScoreText;
 
-        private float bannerTimer;
-        private float lowHealthPulseTimer;
+        [SerializeField] private float lowHealthThreshold = 30f;
 
-        private void Awake()
-        {
-            if (GameManager.Instance) GameManager.Instance.hud = this;
-        }
+        private float bannerTimer;
+        private float pulse;
 
         private void Update()
         {
@@ -47,49 +42,46 @@ namespace DoodleArena
 
             if (bannerTimer > 0f)
             {
-                bannerTimer -= Time.deltaTime;
-                if (bannerPanel && bannerTimer <= 0f) bannerPanel.SetActive(false);
+                bannerTimer -= Time.unscaledDeltaTime;
+                if (bannerTimer <= 0f) SetPanel(bannerPanel, false);
             }
 
-            bool showingRun = gm.IsPlaying || gm.State == GameState.BetweenWave;
-            if (!showingRun)
+            bool inRun = gm.IsPlaying || gm.State == GameState.BetweenWave;
+            if (!inRun)
             {
-                if (bossHealthPanel) bossHealthPanel.SetActive(false);
+                SetPanel(bossHealthPanel, false);
                 return;
             }
 
-            if (roundWaveText) roundWaveText.text = "ROUND " + gm.round + "   WAVE " + Mathf.Min(gm.wave, 3) + "/3";
-            if (scoreText) scoreText.text = gm.score.ToString("000000");
-            if (healthFill) healthFill.fillAmount = Mathf.Clamp01(gm.playerHp / gm.playerMaxHp);
-            if (healthLabel) healthLabel.text = "HP " + Mathf.CeilToInt(gm.playerHp);
-            if (comboText)
-            {
-                comboText.gameObject.SetActive(gm.combo >= 3);
-                comboText.text = "x" + gm.combo + " COMBO";
-            }
-            if (statusText && gm.player)
-                statusText.text = (gm.player.SecondaryReady ? "K READY" : "K CHARGING") + "     I x" + gm.bottles + "     O x" + gm.crates;
+            roundWaveText.text = "ROUND " + gm.round + "/" + gm.totalRounds + "   WAVE " + Mathf.Min(gm.wave, gm.wavesPerRound) + "/" + gm.wavesPerRound;
+            scoreText.text = gm.score.ToString("000000");
+            healthFill.fillAmount = Mathf.Clamp01(gm.playerHp / gm.playerMaxHp);
+            healthLabel.text = "HP " + Mathf.CeilToInt(gm.playerHp);
 
-            var boss = FindFirstObjectByType<BossController>();
-            if (bossHealthPanel) bossHealthPanel.SetActive(boss != null);
-            if (boss != null && bossHealthFill) bossHealthFill.fillAmount = Mathf.Clamp01(boss.Hp / boss.MaxHp);
+            comboText.gameObject.SetActive(gm.combo >= 3);
+            comboText.text = "x" + gm.combo + " COMBO";
 
-            if (lowHealthVignette)
-            {
-                bool low = gm.playerHp <= 30f && gm.IsPlaying;
-                lowHealthVignette.SetActive(low);
-                if (low)
-                {
-                    lowHealthPulseTimer += Time.deltaTime * 7f;
-                    var img = lowHealthVignette.GetComponent<Image>();
-                    if (img)
-                    {
-                        var c = img.color;
-                        c.a = .12f + (Mathf.Sin(lowHealthPulseTimer) + 1f) * .055f;
-                        img.color = c;
-                    }
-                }
-            }
+            if (gm.player)
+                statusText.text = (gm.player.DashReady ? "K READY" : "K CHARGING") + "     I x" + gm.bottles + "     O x" + gm.crates;
+
+            var boss = gm.Boss;
+            SetPanel(bossHealthPanel, boss != null);
+            if (boss != null) bossHealthFill.fillAmount = Mathf.Clamp01(boss.Hp / boss.MaxHp);
+
+            UpdateLowHealthPulse(gm);
+        }
+
+        private void UpdateLowHealthPulse(GameManager gm)
+        {
+            if (!lowHealthVignette) return;
+            bool low = gm.IsPlaying && gm.playerHp <= lowHealthThreshold;
+            lowHealthVignette.gameObject.SetActive(low);
+            if (!low) return;
+
+            pulse += Time.deltaTime * 7f;
+            var c = lowHealthVignette.color;
+            c.a = 0.12f + (Mathf.Sin(pulse) + 1f) * 0.055f;
+            lowHealthVignette.color = c;
         }
 
         public void ShowTitle()
@@ -111,20 +103,22 @@ namespace DoodleArena
 
         public void ShowGameOver()
         {
-            if (gameOverScoreText && GameManager.Instance) gameOverScoreText.text = "FINAL SCORE  " + GameManager.Instance.score.ToString("000000");
+            gameOverScoreText.text = "FINAL SCORE  " + GameManager.Instance.score.ToString("000000");
+            SetPanel(bannerPanel, false);
             SetPanel(gameOverPanel, true);
         }
 
         public void ShowVictory()
         {
-            if (victoryScoreText && GameManager.Instance) victoryScoreText.text = "FINAL SCORE  " + GameManager.Instance.score.ToString("000000");
+            victoryScoreText.text = "FINAL SCORE  " + GameManager.Instance.score.ToString("000000");
+            SetPanel(bannerPanel, false);
             SetPanel(victoryPanel, true);
         }
 
         public void ShowBanner(string text, float duration)
         {
             bannerTimer = duration;
-            if (bannerText) bannerText.text = text;
+            bannerText.text = text;
             SetPanel(bannerPanel, true);
         }
 

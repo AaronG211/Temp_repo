@@ -91,7 +91,7 @@ SpriteRenderer:
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 48, y: 48}
+  m_Size: {x: 0.48, y: 0.48}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -159,7 +159,7 @@ CircleCollider2D:
   m_CompositeOperation: 0
   m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
-  m_Radius: 24
+  m_Radius: 0.24
 --- !u!114 &3724182980614477189
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -173,22 +173,24 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DoodleArena.EnemyController
   kind: 0
-  baseRadius: 24
+  baseRadius: 0.24
+  chaseSpeed: 1.2
+  chaseSpeedPerRound: 0.1
   contactDamage: 11
   contactCooldown: 0.9
-  chaseSpeed: 120
-  chaseSpeedPerRound: 9
-  tankSpeed: 64
+  tankSpeed: 0.65
   tankContactDamage: 18
   tankContactCooldown: 1.35
-  shooterPreferredNear: 260
-  shooterPreferredFar: 390
-  shooterFireInterval: 1.25
-  shooterFireIntervalPerRound: 0.04
   enemyShotPrefab: {fileID: 0}
+  shooterMinDistance: 2.6
+  shooterMaxDistance: 3.9
+  shooterMoveSpeed: 1
+  shooterFireInterval: 1.25
+  shotSpeed: 2.85
+  shotDamage: 9
   healthBarRoot: {fileID: 6245957916823767448}
   healthBarFill: {fileID: 6100031181706777710}
-  healthBarWidth: 48
+  healthBarWidth: 0.48
 --- !u!1 &4179628703565913976
 GameObject:
   m_ObjectHideFlags: 0
@@ -215,7 +217,7 @@ Transform:
   m_GameObject: {fileID: 4179628703565913976}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -8.4, z: 0.01}
+  m_LocalPosition: {x: 0, y: -0.084, z: 0.01}
   m_LocalScale: {x: 1.7, y: 0.93500006, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -308,7 +310,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 48, y: 4.32, z: 1}
+  m_LocalScale: {x: 0.48, y: 0.0432, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 5177459336862465350}
@@ -362,7 +364,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 10
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 21300000, guid: 2f78362a4fee6f241bac135b3e763c27, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 31147f2414741417787f4662e51acdac, type: 3}
   m_Color: {r: 0.15, g: 0.13, b: 0.17, a: 0.9}
   m_FlipX: 0
   m_FlipY: 0
@@ -398,7 +400,7 @@ Transform:
   m_GameObject: {fileID: 6245957916823767448}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 44, z: -0.02}
+  m_LocalPosition: {x: 0, y: 0.44, z: -0.02}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -433,7 +435,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 48, y: 4.32, z: 1}
+  m_LocalScale: {x: 0.48, y: 0.0432, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 5177459336862465350}
@@ -487,7 +489,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 11
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 21300000, guid: 2f78362a4fee6f241bac135b3e763c27, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 31147f2414741417787f4662e51acdac, type: 3}
   m_Color: {r: 0.94, g: 0.36, b: 0.37, a: 1}
   m_FlipX: 0
   m_FlipY: 0

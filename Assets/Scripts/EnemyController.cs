@@ -2,49 +2,55 @@ using UnityEngine;
 
 namespace DoodleArena
 {
-    // Yipeng owns this file: each enemy kind is now a real MonoBehaviour on a
-    // prefab with a Rigidbody2D + Collider2D, spawned with Instantiate instead
-    // of appended to a List<Enemy>. Enemy-vs-enemy separation, which used to be
-    // a manual pairwise distance loop, is now just Unity's own 2D physics
-    // resolving collisions between each enemy's solid, non-trigger collider.
+    // One script for all three regular enemy types; Initialize() picks the stats.
+    //   Chaser  - runs straight at the player
+    //   Shooter - keeps its distance, strafes and fires
+    //   Tank    - slow, lots of HP, hits hard
     [RequireComponent(typeof(Rigidbody2D))]
     [RequireComponent(typeof(CircleCollider2D))]
     public class EnemyController : MonoBehaviour, IDamageableEnemy
     {
-        [Header("Identity")]
         [SerializeField] private EnemyKind kind;
+        [SerializeField] private float baseRadius = 0.24f;
 
-        [Header("Base stats (tuned per-kind at spawn time)")]
-        [SerializeField] private float baseRadius = 24f;
+        [Header("Chaser")]
+        [SerializeField] private float chaseSpeed = 1.2f;
+        [SerializeField] private float chaseSpeedPerRound = 0.1f;
         [SerializeField] private float contactDamage = 11f;
-        [SerializeField] private float contactCooldown = .9f;
-        [SerializeField] private float chaseSpeed = 120f;
-        [SerializeField] private float chaseSpeedPerRound = 9f;
-        [SerializeField] private float tankSpeed = 64f;
+        [SerializeField] private float contactCooldown = 0.9f;
+
+        [Header("Tank")]
+        [SerializeField] private float tankSpeed = 0.65f;
         [SerializeField] private float tankContactDamage = 18f;
         [SerializeField] private float tankContactCooldown = 1.35f;
-        [SerializeField] private float shooterPreferredNear = 260f;
-        [SerializeField] private float shooterPreferredFar = 390f;
-        [SerializeField] private float shooterFireInterval = 1.25f;
-        [SerializeField] private float shooterFireIntervalPerRound = .04f;
-        [SerializeField] private ProjectileController enemyShotPrefab;
 
-        [Header("Mini health bar (hidden until damaged, matches the original's DrawMiniHealth)")]
+        [Header("Shooter")]
+        [SerializeField] private ProjectileController enemyShotPrefab;
+        [SerializeField] private float shooterMinDistance = 2.6f;
+        [SerializeField] private float shooterMaxDistance = 3.9f;
+        [SerializeField] private float shooterMoveSpeed = 1f;
+        [SerializeField] private float shooterFireInterval = 1.25f;
+        [SerializeField] private float shotSpeed = 2.85f;
+        [SerializeField] private float shotDamage = 9f;
+
+        [Header("Health Bar")]
         [SerializeField] private GameObject healthBarRoot;
         [SerializeField] private Transform healthBarFill;
-        [SerializeField] private float healthBarWidth = 48f;
+        [SerializeField] private float healthBarWidth = 0.48f;
 
         public float Hp { get; private set; }
         public float MaxHp { get; private set; }
         public EnemyKind Kind => kind;
         public Vector2 Position => transform.position;
 
+        private const float ContactReach = 0.32f;
+
         private Rigidbody2D body;
         private CircleCollider2D bodyCollider;
         private SpriteRenderer spriteRenderer;
         private Color baseColor;
         private float attackTimer;
-        private float phase;
+        private float wobble;
         private float flashTimer;
         private int round;
 
@@ -54,26 +60,26 @@ namespace DoodleArena
             body.gravityScale = 0f;
             body.freezeRotation = true;
             bodyCollider = GetComponent<CircleCollider2D>();
-            spriteRenderer = GetComponentInChildren<SpriteRenderer>();
+            spriteRenderer = GetComponent<SpriteRenderer>();
             if (spriteRenderer) baseColor = spriteRenderer.color;
         }
 
-        // Called by EnemySpawner right after Instantiate.
         public void Initialize(EnemyKind enemyKind, int currentRound)
         {
             kind = enemyKind;
             round = currentRound;
 
-            float radius = kind == EnemyKind.Tank ? baseRadius * 1.75f
-                : kind == EnemyKind.Shooter ? baseRadius * 1.33f
-                : baseRadius;
-            MaxHp = kind == EnemyKind.Tank ? 74f + round * 8f
-                : kind == EnemyKind.Shooter ? 38f + round * 4f
-                : 44f + round * 5f;
+            switch (kind)
+            {
+                case EnemyKind.Tank:    MaxHp = 75f + round * 8f; bodyCollider.radius = baseRadius * 1.75f; break;
+                case EnemyKind.Shooter: MaxHp = 38f + round * 4f; bodyCollider.radius = baseRadius * 1.33f; break;
+                default:                MaxHp = 44f + round * 5f; bodyCollider.radius = baseRadius; break;
+            }
             Hp = MaxHp;
-            attackTimer = Random.Range(.35f, 1.1f);
-            phase = Random.value * 6f;
-            if (bodyCollider) bodyCollider.radius = radius;
+
+            // stagger first attacks so a fresh wave doesn't all fire on the same frame
+            attackTimer = Random.Range(0.35f, 1.1f);
+            wobble = Random.value * 6f;
             RefreshHealthBar();
         }
 
@@ -83,25 +89,29 @@ namespace DoodleArena
         private void Update()
         {
             var gm = GameManager.Instance;
-            if (gm == null || !gm.IsPlaying) return;
+            if (gm == null || !gm.IsPlaying)
+            {
+                body.linearVelocity = Vector2.zero;
+                return;
+            }
 
             float dt = Time.deltaTime;
             attackTimer -= dt;
-            phase += dt;
+            wobble += dt;
             flashTimer -= dt;
             if (spriteRenderer) spriteRenderer.color = flashTimer > 0f ? Color.white : baseColor;
 
             Vector2 playerPos = gm.player ? (Vector2)gm.player.transform.position : Position;
             Vector2 toPlayer = playerPos - Position;
-            float dist = Mathf.Max(1f, toPlayer.magnitude);
+            float dist = Mathf.Max(0.01f, toPlayer.magnitude);
             Vector2 dir = toPlayer / dist;
-            float radius = bodyCollider ? bodyCollider.radius : baseRadius;
+            float reach = bodyCollider.radius + ContactReach;
 
             switch (kind)
             {
                 case EnemyKind.Chaser:
-                    body.linearVelocity = Vector2.Lerp(body.linearVelocity, dir * (chaseSpeed + round * chaseSpeedPerRound), dt * 4f);
-                    if (dist < radius + 32f && attackTimer <= 0f)
+                    MoveToward(dir * (chaseSpeed + round * chaseSpeedPerRound), 4f, dt);
+                    if (dist < reach && attackTimer <= 0f)
                     {
                         gm.HurtPlayer(contactDamage, dir);
                         attackTimer = contactCooldown;
@@ -109,64 +119,73 @@ namespace DoodleArena
                     break;
 
                 case EnemyKind.Tank:
-                    body.linearVelocity = Vector2.Lerp(body.linearVelocity, dir * tankSpeed, dt * 3f);
-                    if (dist < radius + 38f && attackTimer <= 0f)
+                    MoveToward(dir * tankSpeed, 3f, dt);
+                    if (dist < reach && attackTimer <= 0f)
                     {
                         gm.HurtPlayer(tankContactDamage, dir);
+                        gm.Shake(0.1f);
                         attackTimer = tankContactCooldown;
-                        gm.Shake(10f);
                     }
                     break;
 
                 case EnemyKind.Shooter:
-                    float desired = dist > shooterPreferredFar ? 95f : dist < shooterPreferredNear ? -100f : 0f;
-                    Vector2 strafe = new Vector2(-dir.y, dir.x) * Mathf.Sin(phase * 2f) * 45f;
-                    body.linearVelocity = Vector2.Lerp(body.linearVelocity, dir * desired + strafe, dt * 3f);
+                    // back off if too close, close in if too far, strafe side to side
+                    float approach = dist > shooterMaxDistance ? 1f : dist < shooterMinDistance ? -1f : 0f;
+                    Vector2 strafe = new Vector2(-dir.y, dir.x) * Mathf.Sin(wobble * 2f) * 0.45f;
+                    MoveToward(dir * approach * shooterMoveSpeed + strafe, 3f, dt);
                     if (attackTimer <= 0f)
                     {
-                        FireAt(dir, 285f + round * 8f, 9f);
-                        attackTimer = shooterFireInterval - Mathf.Min(.3f, round * shooterFireIntervalPerRound);
+                        Fire(dir);
+                        attackTimer = shooterFireInterval - Mathf.Min(0.3f, round * 0.05f);
                     }
                     break;
             }
         }
 
-        private void FireAt(Vector2 dir, float speed, float damage)
+        private void MoveToward(Vector2 targetVelocity, float responsiveness, float dt)
+        {
+            body.linearVelocity = Vector2.Lerp(body.linearVelocity, targetVelocity, dt * responsiveness);
+        }
+
+        private void Fire(Vector2 dir)
         {
             if (!enemyShotPrefab) return;
-            ProjectileController shot = Instantiate(enemyShotPrefab, Position + dir * 42f, Quaternion.identity);
-            shot.Launch(dir * speed, damage, 4f, 0);
+            Vector2 spawnPos = Position + dir * (bodyCollider.radius + 0.1f);
+            ProjectileController shot = Instantiate(enemyShotPrefab, spawnPos, Quaternion.identity);
+            shot.Launch(dir * (shotSpeed + round * 0.08f), shotDamage, 4f, 0);
         }
 
         public void TakeDamage(float amount, Vector2 push)
         {
+            if (Hp <= 0f) return;
             Hp -= amount;
             body.linearVelocity += push;
-            flashTimer = .1f;
+            flashTimer = 0.1f;
             RefreshHealthBar();
-            if (GameManager.Instance) GameManager.Instance.Burst(Position, new Color(.42f, .29f, .71f), 5, 145f);
+
+            var gm = GameManager.Instance;
+            if (gm) gm.Burst(Position, Palette.Purple, 5, 1.45f);
             if (Hp > 0f) return;
-            if (GameManager.Instance) GameManager.Instance.RegisterKill(kind, Position);
+            if (gm) gm.RegisterKill(kind, Position);
             Destroy(gameObject);
         }
 
-        // Only shown once an enemy has taken damage, same as the original's
-        // "if (e.hp < e.maxHp) DrawMiniHealth(e)" check. The fill sprite has a
-        // centered pivot, so shrinking its scale also nudges its position left
-        // by half the lost width, keeping the bar's left edge pinned in place
-        // instead of shrinking symmetrically from both sides.
+        // Hidden at full HP. The fill sprite is centred, so when it shrinks we slide it
+        // left by half the missing width to keep the bar's left edge in place.
         private void RefreshHealthBar()
         {
             if (!healthBarRoot) return;
-            bool show = kind != EnemyKind.Boss && Hp > 0f && Hp < MaxHp;
+            bool show = Hp > 0f && Hp < MaxHp;
             healthBarRoot.SetActive(show);
             if (!show || !healthBarFill) return;
-            float ratio = MaxHp > 0f ? Mathf.Clamp01(Hp / MaxHp) : 0f;
+
+            float ratio = Mathf.Clamp01(Hp / MaxHp);
             var scale = healthBarFill.localScale;
             scale.x = healthBarWidth * ratio;
             healthBarFill.localScale = scale;
+
             var pos = healthBarFill.localPosition;
-            pos.x = -(healthBarWidth * (1f - ratio)) * .5f;
+            pos.x = -healthBarWidth * (1f - ratio) * 0.5f;
             healthBarFill.localPosition = pos;
         }
 

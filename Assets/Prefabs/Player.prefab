@@ -89,7 +89,7 @@ SpriteRenderer:
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 62, y: 62}
+  m_Size: {x: 0.62, y: 0.62}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -130,7 +130,7 @@ CircleCollider2D:
   m_CompositeOperation: 0
   m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
-  m_Radius: 28
+  m_Radius: 0.28
 --- !u!114 &5389010541265229464
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -143,26 +143,34 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 21f6365552fcae94bbcd95ea8319fddb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DoodleArena.PlayerController
-  moveSpeed: 365
-  accelSharpness: 14
-  bodyRadius: 28
-  meleeRange: 105
+  moveSpeed: 3.6
+  acceleration: 14
+  bodyRadius: 0.28
+  meleeRange: 1.05
   meleeDamage: 22
-  meleeCooldown: 0.32
-  meleeKnockback: 36
+  meleeCooldown: 0.3
+  meleeKnockback: 0.35
   rangedShotPrefab: {fileID: 6184823186792105119, guid: aec33cb9de817634a8a9615031c77dd8, type: 3}
   rangedCooldown: 0.18
-  rangedSpeed: 760
+  rangedSpeed: 7.5
   rangedDamage: 12
-  rangedLife: 1.45
-  dashDistance: 115
+  rangedLife: 1.5
+  dashDistance: 1.15
   dashCooldown: 2.4
   dashInvincibility: 0.4
-  dashRange: 128
+  dashRadius: 1.3
   dashDamage: 30
-  dashKnockback: 75
+  dashKnockback: 0.75
   bottlePrefab: {fileID: 8291871016190737573, guid: 45ed22a6d54aa83408ccd12682cd6452, type: 3}
+  bottleSpeed: 4.7
+  bottleDamage: 35
+  bottleLife: 0.7
   cratePrefab: {fileID: 5200253419851229671, guid: 79223da961b435b4e9953e245e164583, type: 3}
+  crateSpeed: 5.8
+  crateDamage: 44
+  crateLife: 1.6
+  cratePierce: 3
+  muzzleOffset: 0.36
 --- !u!1 &7629598071783312104
 GameObject:
   m_ObjectHideFlags: 0
@@ -189,8 +197,8 @@ Transform:
   m_GameObject: {fileID: 7629598071783312104}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -9.8, z: 0.01}
-  m_LocalScale: {x: 1.9833333, y: 1.0908333, z: 1}
+  m_LocalPosition: {x: 0, y: -0.098, z: 0.01}
+  m_LocalScale: {x: 1.9833335, y: 1.0908334, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 7558649991819278932}

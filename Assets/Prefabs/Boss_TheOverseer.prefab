@@ -26,7 +26,7 @@ Transform:
   m_GameObject: {fileID: 5762212477727986617}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: -25.199999, z: 0.01}
+  m_LocalPosition: {x: 0, y: -0.252, z: 0.01}
   m_LocalScale: {x: 5.1000004, y: 2.8050003, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -182,7 +182,7 @@ SpriteRenderer:
   m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
-  m_Size: {x: 144, y: 144}
+  m_Size: {x: 1.44, y: 1.44}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
   m_WasSpriteAssigned: 1
@@ -250,7 +250,7 @@ CircleCollider2D:
   m_CompositeOperation: 0
   m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
-  m_Radius: 72
+  m_Radius: 0.72
 --- !u!114 &6786545399502912880
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -265,5 +265,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DoodleArena.BossController
   baseHp: 420
   hpPerRound: 140
-  radius: 72
+  moveSpeed: 0.55
+  enragedMoveSpeed: 0.8
+  strafeAmount: 0.8
   orbPrefab: {fileID: 3354962491746946429, guid: 367dc11dcaf0a5f419a0a97e3531f34f, type: 3}
+  phaseTwoAt: 0.65
+  phaseThreeAt: 0.32
+  maxMinions: 2
