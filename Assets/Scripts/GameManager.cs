@@ -255,6 +255,7 @@ namespace DoodleArena
 
         public void RegisterKill(EnemyKind kind, Vector2 pos)
         {
+            if (State == GameState.GameOver || State == GameState.Victory) return;
             bool isBoss = kind == EnemyKind.Boss;
             score += isBoss ? 2500 : kind == EnemyKind.Tank ? 250 : 100;
             combo++;

@@ -81,7 +81,9 @@ namespace DoodleArena
         private void Update()
         {
             var gm = GameManager.Instance;
-            if (gm == null || !gm.IsPlaying || moveAction == null) return;
+            if (gm == null || moveAction == null) return;
+            // keep control during the short break between waves, not just mid-wave
+            if (!gm.IsPlaying && gm.State != GameState.BetweenWave) return;
 
             float dt = Time.deltaTime;
             attackTimer -= dt;

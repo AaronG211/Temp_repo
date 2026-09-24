@@ -41,10 +41,17 @@ namespace DoodleArena
 
         private void Update()
         {
+            var gm = GameManager.Instance;
+            if (gm && (gm.State == GameState.GameOver || gm.State == GameState.Victory))
+            {
+                // freeze in place on the end screens so nothing keeps scoring or exploding
+                body.linearVelocity = Vector2.zero;
+                return;
+            }
+
             life -= Time.deltaTime;
             if (kind == ShotKind.Bottle) body.linearVelocity *= 1f - Time.deltaTime * bottleDrag;
 
-            var gm = GameManager.Instance;
             bool outOfBounds = gm && !gm.arena.Contains(transform.position);
             if (life > 0f && !outOfBounds) return;
 
